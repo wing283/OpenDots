@@ -14,7 +14,9 @@ export type SupervisorHealth = {
   };
 };
 
-export function normalizeSupervisorHealth(value: unknown): SupervisorHealth | null {
+export function normalizeSupervisorHealth(
+  value: unknown,
+): SupervisorHealth | null {
   if (!value || typeof value !== 'object') return null;
   const raw = value as Record<string, unknown>;
   const execution =
@@ -34,8 +36,7 @@ export function normalizeSupervisorHealth(value: unknown): SupervisorHealth | nu
         : [],
       activeCount:
         typeof execution.activeCount === 'number' ? execution.activeCount : 0,
-      capacity:
-        typeof execution.capacity === 'number' ? execution.capacity : 0,
+      capacity: typeof execution.capacity === 'number' ? execution.capacity : 0,
       cdpReady: execution.cdpReady === true,
     },
   };
@@ -55,7 +56,12 @@ export function SupervisorHealthStatus({ enabled }: { enabled: boolean }) {
     const load = async () => {
       try {
         const next = normalizeSupervisorHealth(
-          await api('/supervisor/health', 'GET', undefined, AbortSignal.timeout(3500)),
+          await api(
+            '/supervisor/health',
+            'GET',
+            undefined,
+            AbortSignal.timeout(3500),
+          ),
         );
         if (active) {
           setHealth(next);
