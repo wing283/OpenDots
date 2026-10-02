@@ -1,0 +1,25 @@
+name: Supervisor Format Diagnostic
+
+on:
+  push:
+    branches:
+      - feature/supervisor-integration
+
+permissions:
+  contents: read
+
+jobs:
+  diff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Print Prettier diff
+        run: |
+          npx prettier --write             src/client/PageConversation.tsx             src/client/SupervisorHealthStatus.tsx             src/client/SupervisorRunPanel.tsx             src/server/supervisor-routes.ts             src/server/workspace-routes.ts             tests/supervisor-local-runtime.test.ts             tests/supervisor-run-panel.test.tsx             .github/workflows/supervisor-integration-ci.yml
+          git diff --no-color --             src/client/PageConversation.tsx             src/client/SupervisorHealthStatus.tsx             src/client/SupervisorRunPanel.tsx             src/server/supervisor-routes.ts             src/server/workspace-routes.ts             tests/supervisor-local-runtime.test.ts             tests/supervisor-run-panel.test.tsx             .github/workflows/supervisor-integration-ci.yml
