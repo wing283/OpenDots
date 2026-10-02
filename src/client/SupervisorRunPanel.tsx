@@ -159,6 +159,8 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
   );
   const cacheHits = snapshot.eventCounts.CACHE_HIT ?? 0;
   const cacheMisses = snapshot.eventCounts.CACHE_MISS ?? 0;
+  const planCacheHits = snapshot.eventCounts.PLAN_CACHE_HIT ?? 0;
+  const planCacheMisses = snapshot.eventCounts.PLAN_CACHE_MISS ?? 0;
   const evidence = snapshot.eventCounts.EVIDENCE_RECORDED ?? 0;
   const approvalPending = snapshot.approval?.status === 'pending';
   const saveEvidence = async () => {
@@ -251,7 +253,8 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
         <span>{completed}/{snapshot.workers.length} workers</span>
         <span>{totalTokens.toLocaleString()} tokens</span>
         <span>${totalCost.toFixed(4)}</span>
-        <span>cache {cacheHits}/{cacheMisses}</span>
+        <span>result cache {cacheHits}/{cacheMisses}</span>
+        <span>plan cache {planCacheHits}/{planCacheMisses}</span>
         <span>{evidence} evidence</span>
       </div>
       {evidence > 0 && snapshot.supervisorRunId && (
