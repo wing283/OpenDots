@@ -9,6 +9,13 @@ const runRef = z
   })
   .strict();
 
+const cancelRef = z
+  .object({
+    supervisorRunId: z.string().trim().min(1).max(128),
+    supervisorPid: z.number().int().positive().optional(),
+  })
+  .strict();
+
 const approval = z
   .object({
     supervisorRunId: z.string().trim().min(1).max(128),
@@ -116,6 +123,26 @@ export function supervisorRoutes(
   workspace: WorkspaceStore,
 ) {
   const app = new Hono();
+
+  app.post('/supervisor/cancel', async (c) => {
+    if (!config.supervisorAguiUrl || !config.supervisorDotId)
+      return c.json({ error: 'Supervisor integration is not configured.' }, 404);
+
+    const parsed = cancelRef.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ error: 'Invalid Supervisor cancel request.' }, 400);
+
+    const response = await bridgePost(
+      config,
+      '/cancel',
+      parsed.data,
+      c.req.raw.signal,
+    );
+    const body = (await response.json().catch(() => ({
+      error: 'Supervisor bridge returned an unreadable response.',
+    }))) as Record<string, unknown>;
+    return c.json(body, response.status as 200 | 400 | 404 | 409 | 500);
+  });
 
   app.post('/supervisor/approval', async (c) => {
     if (!config.supervisorAguiUrl || !config.supervisorDotId)

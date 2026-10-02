@@ -140,6 +140,8 @@ export function dagLayers(workers: Worker[]): Worker[][] {
 export function SupervisorRunPanel({ state }: { state: unknown }) {
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [approvalError, setApprovalError] = useState('');
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState('');
   const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [evidenceError, setEvidenceError] = useState('');
   const [savedEvidence, setSavedEvidence] = useState<{
@@ -203,6 +205,27 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
     }
   };
 
+  const cancelRun = async () => {
+    if (!snapshot.running || !snapshot.supervisorRunId || cancelBusy) return;
+    setCancelBusy(true);
+    setCancelError('');
+    try {
+      const { api } = await import('./api');
+      await api('/supervisor/cancel', 'POST', {
+        supervisorRunId: snapshot.supervisorRunId,
+        ...(snapshot.supervisorPid > 0
+          ? { supervisorPid: snapshot.supervisorPid }
+          : {}),
+      });
+    } catch (error) {
+      setCancelError(
+        error instanceof Error ? error.message : 'Cancel request failed.',
+      );
+    } finally {
+      setCancelBusy(false);
+    }
+  };
+
   return (
     <section className="supervisor-run-panel" aria-label="Supervisor workflow">
       <div className="supervisor-run-heading">
@@ -210,8 +233,20 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
           <strong>Supervisor DAG</strong>
           <span>{snapshot.running ? 'Running' : 'Finished'}</span>
         </div>
-        <code>{snapshot.supervisorRunId || 'starting…'}</code>
+        <div className="supervisor-run-heading-actions">
+          <code>{snapshot.supervisorRunId || 'starting…'}</code>
+          {snapshot.running && snapshot.supervisorRunId && (
+            <button
+              type="button"
+              disabled={cancelBusy}
+              onClick={() => void cancelRun()}
+            >
+              {cancelBusy ? 'Stopping…' : 'Stop run'}
+            </button>
+          )}
+        </div>
       </div>
+      {cancelError && <p className="supervisor-run-error">{cancelError}</p>}
       <div className="supervisor-run-metrics">
         <span>{completed}/{snapshot.workers.length} workers</span>
         <span>{totalTokens.toLocaleString()} tokens</span>

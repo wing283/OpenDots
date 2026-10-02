@@ -4195,3 +4195,28 @@ h3 {
   top: 14px;
   opacity: 0.45;
 }
+
+.supervisor-run-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.supervisor-run-heading-actions button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 9px;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+}
+
+.supervisor-run-heading-actions button:hover:not(:disabled) {
+  border-color: #b65f6c;
+}
+
+.supervisor-run-error {
+  margin: 6px 0 0;
+  color: #b65f6c;
+  font-size: 12px;
+}

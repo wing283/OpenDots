@@ -136,3 +136,57 @@ it('projects evidence into one stable Space page per Supervisor run', async () =
     workspace.close();
   }
 });
+
+it('proxies run-scoped cancel to the configured bridge', async () => {
+  const { workspace, config } = setup();
+  try {
+    const fetchMock = vi.fn(async (url: URL, init?: RequestInit) => {
+      expect(url.toString()).toBe('http://127.0.0.1:8791/cancel');
+      expect(JSON.parse(String(init?.body))).toEqual({
+        supervisorRunId: 'sv-1',
+        supervisorPid: 123,
+      });
+      return Response.json({
+        ok: true,
+        supervisorRunId: 'sv-1',
+        supervisorPid: 123,
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const app = supervisorRoutes(config, workspace);
+    const response = await app.request('/supervisor/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        supervisorRunId: 'sv-1',
+        supervisorPid: 123,
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      ok: true,
+      supervisorRunId: 'sv-1',
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  } finally {
+    workspace.close();
+  }
+});
+
+it('rejects malformed cancel before contacting the bridge', async () => {
+  const { workspace, config } = setup();
+  try {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const app = supervisorRoutes(config, workspace);
+    const response = await app.request('/supervisor/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ supervisorRunId: '' }),
+    });
+    expect(response.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  } finally {
+    workspace.close();
+  }
+});
