@@ -46,6 +46,7 @@ async function direct(url, prompt) {
   const agent = new HttpAgent({ url });
   let snapshot = {};
   let runError = null;
+  let tokenCost = null;
   const start = performance.now();
   await new Promise((resolve, reject) => {
     agent.run(input(prompt, 'direct-live')).subscribe({
@@ -53,14 +54,23 @@ async function direct(url, prompt) {
         if (event.type === 'STATE_SNAPSHOT') snapshot = event.snapshot ?? {};
         if (event.type === 'RUN_ERROR')
           runError = { code: event.code ?? '', message: event.message ?? '' };
+        if (event.type === 'CUSTOM' && event.name === 'sv.token.cost.report')
+          tokenCost = event.value?.payload ?? null;
       },
       error: reject,
       complete: resolve,
     });
   });
+  const summary = summarize(snapshot);
+  if (tokenCost) {
+    summary.tokens = Number(tokenCost.actual_total_tokens || 0);
+    summary.costUsd = Number(Number(tokenCost.actual_cost_usd || 0).toFixed(6));
+    summary.baselineCostUsd = Number(Number(tokenCost.baseline_cost_usd || 0).toFixed(6));
+    summary.costSavingsPercent = Number(tokenCost.cost_savings_percent || 0);
+  }
   return {
     wallMs: Number((performance.now() - start).toFixed(3)),
-    ...summarize(snapshot),
+    ...summary,
     runError,
   };
 }
@@ -76,12 +86,17 @@ async function proxied(runtimeUrl, runtimeAgentId, threadId, prompt) {
   agent.addMessage({ id: randomUUID(), role: 'user', content: prompt });
   let snapshot = {};
   let runError = null;
+  let tokenCost = null;
   const sub = agent.subscribe({
     onStateSnapshotEvent: ({ event }) => {
       snapshot = event.snapshot ?? {};
     },
     onRunErrorEvent: ({ event }) => {
       runError = { code: event.code ?? '', message: event.message ?? '' };
+    },
+    onCustomEvent: ({ event }) => {
+      if (event.name === 'sv.token.cost.report')
+        tokenCost = event.value?.payload ?? null;
     },
   });
   const start = performance.now();
@@ -91,9 +106,16 @@ async function proxied(runtimeUrl, runtimeAgentId, threadId, prompt) {
     sub.unsubscribe();
     await agent.detachActiveRun();
   }
+  const summary = summarize(snapshot);
+  if (tokenCost) {
+    summary.tokens = Number(tokenCost.actual_total_tokens || 0);
+    summary.costUsd = Number(Number(tokenCost.actual_cost_usd || 0).toFixed(6));
+    summary.baselineCostUsd = Number(Number(tokenCost.baseline_cost_usd || 0).toFixed(6));
+    summary.costSavingsPercent = Number(tokenCost.cost_savings_percent || 0);
+  }
   return {
     wallMs: Number((performance.now() - start).toFixed(3)),
-    ...summarize(snapshot),
+    ...summary,
     runError,
   };
 }
