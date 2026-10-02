@@ -69,6 +69,55 @@ function sumTokenCost(customEvents) {
   };
 }
 
+function evaluateDagCache(first, second, keyComparison) {
+  const expected = ['light_calc', 'light_sort', 'heavy_logic', 'heavy_design_review'];
+  const firstById = Object.fromEntries((first.workers || []).map((worker) => [worker.id, worker]));
+  const secondById = Object.fromEntries((second.workers || []).map((worker) => [worker.id, worker]));
+  const firstIds = Object.keys(firstById).sort();
+  const secondIds = Object.keys(secondById).sort();
+  const exactWorkers =
+    JSON.stringify(firstIds) === JSON.stringify([...expected].sort()) &&
+    JSON.stringify(secondIds) === JSON.stringify([...expected].sort());
+  const independent =
+    expected.every((id) => (firstById[id]?.dependsOn || []).length === 0) &&
+    expected.every((id) => (secondById[id]?.dependsOn || []).length === 0);
+  const keysStable = expected.every((id) => keyComparison[id]?.same === true);
+  const fullCacheHit = second.cacheHits === expected.length;
+  const evidenceProjected =
+    Number(first.evidence?.totalCount || 0) > 0 &&
+    first.evidence?.spaceName === 'Supervisor Evidence' &&
+    Number(second.evidence?.totalCount || 0) > 0 &&
+    second.evidence?.spaceName === 'Supervisor Evidence';
+  const completedWithoutRunError = !first.runError && !second.runError;
+  return {
+    pass:
+      exactWorkers &&
+      independent &&
+      keysStable &&
+      fullCacheHit &&
+      evidenceProjected &&
+      completedWithoutRunError,
+    exactWorkers,
+    independent,
+    keysStable,
+    fullCacheHit,
+    evidenceProjected,
+    completedWithoutRunError,
+    firstCache: {
+      hits: first.cacheHits,
+      misses: first.cacheMisses,
+      stores: first.cacheStores,
+      skipped: first.cacheStoreSkipped,
+    },
+    secondCache: {
+      hits: second.cacheHits,
+      misses: second.cacheMisses,
+      stores: second.cacheStores,
+      skipped: second.cacheStoreSkipped,
+    },
+  };
+}
+
 async function projectEvidence(base, supervisorRunId) {
   if (!supervisorRunId) return null;
   return json(`${base}/api/supervisor/evidence`, {
@@ -235,6 +284,11 @@ if (mode === 'all' || mode === 'dag-cache') {
       ],
     ),
   );
+  results.dagCacheVerdict = evaluateDagCache(
+    results.dagCacheFirst,
+    results.dagCacheSecond,
+    results.cacheKeyComparison,
+  );
 }
 
 if (mode === 'all' || mode === 'writer-approval') {
@@ -294,6 +348,18 @@ if (mode === 'all' || mode === 'writer-approval') {
     markerContent,
     markerCleaned: true,
   };
+  results.writerApprovalVerdict = {
+    pass:
+      approvalSent &&
+      !result.runError &&
+      markerExists &&
+      markerContent === 'OPENDOTS_WRITER_APPROVED' &&
+      result.approvalResolved >= 1,
+    approvalSent,
+    approvalResolvedEvents: result.approvalResolved,
+    markerExact: markerContent === 'OPENDOTS_WRITER_APPROVED',
+    runCompleted: !result.runError,
+  };
 }
 
 if (mode === 'all' || mode === 'cancel') {
@@ -334,6 +400,16 @@ if (mode === 'all' || mode === 'cancel') {
     },
   });
   results.cancel = { ...result, cancelSent, cancelResponse };
+  results.cancelVerdict = {
+    pass:
+      cancelSent &&
+      cancelResponse?.ok === true &&
+      !!result.runError,
+    cancelSent,
+    cancelAccepted: cancelResponse?.ok === true,
+    runTerminatedWithError: !!result.runError,
+    runErrorCode: result.runError?.code || '',
+  };
 }
 
 console.log(JSON.stringify(results, null, 2));
