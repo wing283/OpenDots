@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
   SupervisorRunPanel,
+  dagLayers,
   supervisorSnapshot,
 } from '../src/client/SupervisorRunPanel';
 
@@ -66,4 +67,33 @@ it('renders Supervisor DAG state, costs, cache and dependencies', () => {
   expect(html).toContain('Save evidence');
   expect(html).toContain('deps: planner');
   expect(html).toContain('critical');
+});
+
+it('groups workers into dependency layers', () => {
+  const workers = [
+    { id: 'a', dependsOn: [] },
+    { id: 'b', dependsOn: ['a'] },
+    { id: 'c', dependsOn: ['a'] },
+    { id: 'd', dependsOn: ['b', 'c'] },
+  ].map((worker) => ({
+    title: worker.id,
+    status: '',
+    action: '',
+    phase: '',
+    provider: '',
+    model: '',
+    complexity: '',
+    mode: '',
+    waitingFor: [],
+    downstreamWaitingCount: 0,
+    reason: '',
+    costUsd: 0,
+    tokens: 0,
+    ...worker,
+  }));
+  expect(dagLayers(workers).map((layer) => layer.map((worker) => worker.id))).toEqual([
+    ['a'],
+    ['b', 'c'],
+    ['d'],
+  ]);
 });

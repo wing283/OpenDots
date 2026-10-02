@@ -4154,3 +4154,44 @@ h3 {
   color: var(--muted);
   font-size: 12px;
 }
+
+.supervisor-dag-flow {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(220px, 1fr);
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.supervisor-dag-layer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.supervisor-dag-layer-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+  text-transform: uppercase;
+}
+
+.supervisor-dag-layer + .supervisor-dag-layer {
+  border-left: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  padding-left: 14px;
+}
+
+.supervisor-dag-layer .supervisor-node {
+  position: relative;
+}
+
+.supervisor-dag-layer + .supervisor-dag-layer .supervisor-node::before {
+  content: '→';
+  position: absolute;
+  left: -19px;
+  top: 14px;
+  opacity: 0.45;
+}

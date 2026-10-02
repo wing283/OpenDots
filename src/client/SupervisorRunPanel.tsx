@@ -110,6 +110,33 @@ function tone(worker: Worker): string {
   return 'idle';
 }
 
+export function dagLayers(workers: Worker[]): Worker[][] {
+  const byId = new Map(workers.map((worker) => [worker.id, worker]));
+  const depth = new Map<string, number>();
+  const visiting = new Set<string>();
+
+  const visit = (worker: Worker): number => {
+    const known = depth.get(worker.id);
+    if (known !== undefined) return known;
+    if (visiting.has(worker.id)) return 0;
+    visiting.add(worker.id);
+    const parents = worker.dependsOn
+      .map((id) => byId.get(id))
+      .filter((item): item is Worker => Boolean(item));
+    const value =
+      parents.length === 0 ? 0 : 1 + Math.max(...parents.map((item) => visit(item)));
+    visiting.delete(worker.id);
+    depth.set(worker.id, value);
+    return value;
+  };
+
+  for (const worker of workers) visit(worker);
+  const maxDepth = Math.max(0, ...depth.values());
+  return Array.from({ length: maxDepth + 1 }, (_, level) =>
+    workers.filter((worker) => (depth.get(worker.id) ?? 0) === level),
+  ).filter((layer) => layer.length > 0);
+}
+
 export function SupervisorRunPanel({ state }: { state: unknown }) {
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [approvalError, setApprovalError] = useState('');
@@ -246,8 +273,11 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
           {approvalError && <p>{approvalError}</p>}
         </div>
       )}
-      <div className="supervisor-dag-grid">
-        {snapshot.workers.map((worker) => (
+      <div className="supervisor-dag-flow">
+        {dagLayers(snapshot.workers).map((layer, layerIndex) => (
+          <div className="supervisor-dag-layer" key={layerIndex}>
+            <div className="supervisor-dag-layer-label">L{layerIndex}</div>
+            {layer.map((worker) => (
           <article
             className={`supervisor-node ${tone(worker)} ${
               critical > 0 && worker.downstreamWaitingCount === critical
@@ -276,6 +306,8 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
             )}
             {worker.reason && <p title={worker.reason}>{worker.reason}</p>}
           </article>
+            ))}
+          </div>
         ))}
       </div>
     </section>
