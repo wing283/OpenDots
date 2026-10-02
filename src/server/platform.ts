@@ -100,8 +100,14 @@ export class Platform {
       this.channelStartupFailed,
     );
   }
-  requireReady() {
+  missingForDot(dotId?: string) {
     const missing = this.setup().missing;
+    if (dotId && dotId === this.config.supervisorDotId)
+      return missing.filter((item) => item === 'INTELLIGENCE_API_KEY');
+    return missing;
+  }
+  requireReady(dotId?: string) {
+    const missing = this.missingForDot(dotId);
     if (missing.length)
       throw new Error(
         `Setup required: ${missing.join(', ')}. Conversations require CopilotKit Intelligence.`,
@@ -122,8 +128,8 @@ export class Platform {
     await this.handler?.channels?.stop();
   }
   async createConversation(dotId: string, title: string) {
-    this.requireReady();
     if (!this.workspace.dot(dotId)) throw new Error('Dot not found.');
+    this.requireReady(dotId);
     const id = randomUUID();
     try {
       await this.intelligence!.createThread({
@@ -140,8 +146,8 @@ export class Platform {
     return this.workspace.bindThread(id, dotId, title);
   }
   async history(threadId: string): Promise<string> {
-    this.requireReady();
-    this.workspace.requireThread(threadId);
+    const thread = this.workspace.requireThread(threadId);
+    this.requireReady(thread.dotId);
     const history = await this.intelligence!.getThreadMessages({
       threadId,
       userId: this.workspace.ownerId,
