@@ -76,7 +76,7 @@ export function createApp({
   });
   if (platform) {
     app.route('/api', computerRoutes(platform.computers));
-    app.route('/api', supervisorRoutes(platform.config));
+    app.route('/api', supervisorRoutes(platform.config, platform.workspace));
   }
   const voice = platform ? new VoiceService(platform) : undefined;
   if (platform && voice) app.route('/api', workspaceRoutes(platform, voice));
