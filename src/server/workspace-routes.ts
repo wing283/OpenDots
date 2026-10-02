@@ -130,10 +130,7 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
       return c.json({ error: 'Select a Dot and a conversation title.' }, 400);
     const missing = platform.missingForDot(data.data.dotId);
     if (missing.length)
-      return c.json(
-        { error: `Setup required: ${missing.join(', ')}.` },
-        503,
-      );
+      return c.json({ error: `Setup required: ${missing.join(', ')}.` }, 503);
     return c.json(
       await platform.createConversation(data.data.dotId, data.data.title),
       201,
