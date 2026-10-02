@@ -30,7 +30,10 @@ import type { CallReceipt, Conversation, Dot } from '../shared/types';
 import { Mascot } from './Mascot';
 import { useVoice } from './useVoice';
 import { CallView } from './CallView';
-import { SupervisorRunPanel } from './SupervisorRunPanel';
+import {
+  SupervisorRunPanel,
+  supervisorSnapshot,
+} from './SupervisorRunPanel';
 import { SupervisorHealthStatus } from './SupervisorHealthStatus';
 export function Chat({
   thread,
@@ -98,13 +101,21 @@ export function Chat({
   const [running, setRunning] = useState(false);
   const voice = useVoice(thread.id, onSaved, agent.messages.at(-1)?.id);
   const sent = useRef(false);
+  const cancelled = useRef(false);
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const subscription = copilotkit.subscribe({
       onError: ({ error }) => setError(error.message),
     });
     const events = agent.subscribe({
-      onRunErrorEvent: ({ event }) => setError(event.message),
+      onRunErrorEvent: ({ event }) => {
+        if (event.code === 'SUPERVISOR_CANCELLED') {
+          cancelled.current = true;
+          setError('');
+          return;
+        }
+        setError(event.message);
+      },
     });
     return () => {
       subscription.unsubscribe();
@@ -132,6 +143,7 @@ export function Chat({
   const send = async (text: string) => {
     if (!text.trim() || running || !loaded || !contextReady || paused) return;
     setError('');
+    cancelled.current = false;
     setRunning(true);
     agent.addMessage({
       id: crypto.randomUUID(),
@@ -143,21 +155,56 @@ export function Chat({
     setSourceOpen(false);
     try {
       const result = await copilotkit.runAgent({ agent });
-      if (!result.newMessages.some((message) => message.role === 'assistant'))
+      if (!result.newMessages.some((message) => message.role === 'assistant')) {
+        if (cancelled.current) {
+          onSaved();
+          return;
+        }
         throw new Error(
           'The current turn returned no response. Check the runtime connection and retry.',
         );
+      }
       onSaved();
     } catch (e) {
-      setError(
-        e instanceof Error
-          ? e.message
-          : 'The turn failed. Your conversation remains saved.',
-      );
+      if (!cancelled.current)
+        setError(
+          e instanceof Error
+            ? e.message
+            : 'The turn failed. Your conversation remains saved.',
+        );
     } finally {
       setRunning(false);
     }
   };
+  const stopResponse = async () => {
+    if (!supervisor) {
+      copilotkit.stopAgent({ agent });
+      return;
+    }
+    const snapshot = supervisorSnapshot(agent.state);
+    if (!snapshot?.running || !snapshot.supervisorRunId) {
+      setError(
+        'Supervisor run is not yet cancellable. Keep the stream open until its run id appears.',
+      );
+      return;
+    }
+    try {
+      await api('/supervisor/cancel', 'POST', {
+        supervisorRunId: snapshot.supervisorRunId,
+        ...(snapshot.supervisorPid > 0
+          ? { supervisorPid: snapshot.supervisorPid }
+          : {}),
+      });
+      cancelled.current = true;
+      setError('');
+      copilotkit.stopAgent({ agent });
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : 'Supervisor cancellation failed.',
+      );
+    }
+  };
+
   useEffect(() => {
     if (loaded && contextReady && !paused && initialPrompt && !sent.current) {
       sent.current = true;
@@ -433,7 +480,7 @@ export function Chat({
               type="button"
               className="send-button"
               aria-label="Stop response"
-              onClick={() => copilotkit.stopAgent({ agent })}
+              onClick={() => void stopResponse()}
             >
               <Square size={16} />
             </button>
