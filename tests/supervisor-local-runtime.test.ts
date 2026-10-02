@@ -41,9 +41,14 @@ it('creates an SSE runtime for the external Supervisor Dot without Intelligence'
   ]);
   expect(platform.missingForDot(supervisor.id)).toEqual([]);
 
-  const thread = await platform.createConversation(supervisor.id, 'Local Supervisor');
+  const thread = await platform.createConversation(
+    supervisor.id,
+    'Local Supervisor',
+  );
   expect(thread.dotId).toBe(supervisor.id);
-  expect(platform.workspace.requireThread(thread.id).title).toBe('Local Supervisor');
+  expect(platform.workspace.requireThread(thread.id).title).toBe(
+    'Local Supervisor',
+  );
 });
 
 it('keeps ordinary Dots setup-gated when only Supervisor is external', async () => {
