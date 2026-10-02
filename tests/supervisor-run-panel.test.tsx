@@ -23,6 +23,8 @@ it('renders Supervisor DAG state, costs, cache and dependencies', () => {
     eventCounts: {
       CACHE_HIT: 2,
       CACHE_MISS: 1,
+      PLAN_CACHE_HIT: 1,
+      PLAN_CACHE_MISS: 0,
       EVIDENCE_RECORDED: 3,
     },
     workers: [
@@ -62,7 +64,8 @@ it('renders Supervisor DAG state, costs, cache and dependencies', () => {
   expect(html).toContain('1/2 workers');
   expect(html).toContain('2,000 tokens');
   expect(html).toContain('$0.3750');
-  expect(html).toContain('cache 2/1');
+  expect(html).toContain('result cache 2/1');
+  expect(html).toContain('plan cache 1/0');
   expect(html).toContain('3 evidence');
   expect(html).toContain('Save evidence');
   expect(html).toContain('Stop run');
