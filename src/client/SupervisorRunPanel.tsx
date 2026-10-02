@@ -63,23 +63,25 @@ export function supervisorSnapshot(value: unknown): SupervisorSnapshot | null {
     ? raw.workers.flatMap((entry) => {
         const worker = record(entry);
         if (!worker) return [];
-        return [{
-          id: text(worker.id),
-          title: text(worker.title) || text(worker.id),
-          status: text(worker.status),
-          action: text(worker.action),
-          phase: text(worker.phase),
-          provider: text(worker.provider),
-          model: text(worker.model),
-          complexity: text(worker.complexity),
-          mode: text(worker.mode),
-          dependsOn: list(worker.dependsOn),
-          waitingFor: list(worker.waitingFor),
-          downstreamWaitingCount: number(worker.downstreamWaitingCount),
-          reason: text(worker.reason),
-          costUsd: number(worker.costUsd),
-          tokens: number(worker.tokens),
-        }];
+        return [
+          {
+            id: text(worker.id),
+            title: text(worker.title) || text(worker.id),
+            status: text(worker.status),
+            action: text(worker.action),
+            phase: text(worker.phase),
+            provider: text(worker.provider),
+            model: text(worker.model),
+            complexity: text(worker.complexity),
+            mode: text(worker.mode),
+            dependsOn: list(worker.dependsOn),
+            waitingFor: list(worker.waitingFor),
+            downstreamWaitingCount: number(worker.downstreamWaitingCount),
+            reason: text(worker.reason),
+            costUsd: number(worker.costUsd),
+            tokens: number(worker.tokens),
+          },
+        ];
       })
     : [];
   const counts = record(raw.eventCounts) ?? {};
@@ -103,7 +105,8 @@ export function supervisorSnapshot(value: unknown): SupervisorSnapshot | null {
 }
 
 function tone(worker: Worker): string {
-  const value = `${worker.status} ${worker.action} ${worker.reason}`.toLowerCase();
+  const value =
+    `${worker.status} ${worker.action} ${worker.reason}`.toLowerCase();
   if (/fail|error|blocked|need_human|insufficient/.test(value)) return 'bad';
   if (/running|work|evaluat|wait|queued/.test(value)) return 'active';
   if (/complete|success|stopped/.test(value)) return 'done';
@@ -124,7 +127,9 @@ export function dagLayers(workers: Worker[]): Worker[][] {
       .map((id) => byId.get(id))
       .filter((item): item is Worker => Boolean(item));
     const value =
-      parents.length === 0 ? 0 : 1 + Math.max(...parents.map((item) => visit(item)));
+      parents.length === 0
+        ? 0
+        : 1 + Math.max(...parents.map((item) => visit(item)));
     visiting.delete(worker.id);
     depth.set(worker.id, value);
     return value;
@@ -150,9 +155,17 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
   } | null>(null);
   const snapshot = supervisorSnapshot(state);
   if (!snapshot) return null;
-  const totalTokens = snapshot.workers.reduce((sum, item) => sum + item.tokens, 0);
-  const totalCost = snapshot.workers.reduce((sum, item) => sum + item.costUsd, 0);
-  const completed = snapshot.workers.filter((item) => tone(item) === 'done').length;
+  const totalTokens = snapshot.workers.reduce(
+    (sum, item) => sum + item.tokens,
+    0,
+  );
+  const totalCost = snapshot.workers.reduce(
+    (sum, item) => sum + item.costUsd,
+    0,
+  );
+  const completed = snapshot.workers.filter(
+    (item) => tone(item) === 'done',
+  ).length;
   const critical = Math.max(
     0,
     ...snapshot.workers.map((item) => item.downstreamWaitingCount),
@@ -250,11 +263,17 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
       </div>
       {cancelError && <p className="supervisor-run-error">{cancelError}</p>}
       <div className="supervisor-run-metrics">
-        <span>{completed}/{snapshot.workers.length} workers</span>
+        <span>
+          {completed}/{snapshot.workers.length} workers
+        </span>
         <span>{totalTokens.toLocaleString()} tokens</span>
         <span>${totalCost.toFixed(4)}</span>
-        <span>result cache {cacheHits}/{cacheMisses}</span>
-        <span>plan cache {planCacheHits}/{planCacheMisses}</span>
+        <span>
+          result cache {cacheHits}/{cacheMisses}
+        </span>
+        <span>
+          plan cache {planCacheHits}/{planCacheMisses}
+        </span>
         <span>{evidence} evidence</span>
       </div>
       {evidence > 0 && snapshot.supervisorRunId && (
@@ -270,8 +289,7 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
             <button
               type="button"
               onClick={() => {
-                location.hash =
-                  `/spaces/${savedEvidence.spaceId}/pages/${savedEvidence.pageId}`;
+                location.hash = `/spaces/${savedEvidence.spaceId}/pages/${savedEvidence.pageId}`;
               }}
             >
               Open evidence
@@ -316,34 +334,34 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
           <div className="supervisor-dag-layer" key={layerIndex}>
             <div className="supervisor-dag-layer-label">L{layerIndex}</div>
             {layer.map((worker) => (
-          <article
-            className={`supervisor-node ${tone(worker)} ${
-              critical > 0 && worker.downstreamWaitingCount === critical
-                ? 'critical'
-                : ''
-            }`}
-            key={worker.id}
-          >
-            <div className="supervisor-node-title">
-              <strong>{worker.title || worker.id}</strong>
-              <span>{worker.action || worker.status || 'pending'}</span>
-            </div>
-            <small>
-              {[worker.provider, worker.model, worker.complexity]
-                .filter(Boolean)
-                .join(' · ') || 'routing pending'}
-            </small>
-            {worker.dependsOn.length > 0 && (
-              <p>deps: {worker.dependsOn.join(' → ')}</p>
-            )}
-            {worker.waitingFor.length > 0 && (
-              <p>waiting: {worker.waitingFor.join(', ')}</p>
-            )}
-            {worker.downstreamWaitingCount > 0 && (
-              <p>downstream: {worker.downstreamWaitingCount}</p>
-            )}
-            {worker.reason && <p title={worker.reason}>{worker.reason}</p>}
-          </article>
+              <article
+                className={`supervisor-node ${tone(worker)} ${
+                  critical > 0 && worker.downstreamWaitingCount === critical
+                    ? 'critical'
+                    : ''
+                }`}
+                key={worker.id}
+              >
+                <div className="supervisor-node-title">
+                  <strong>{worker.title || worker.id}</strong>
+                  <span>{worker.action || worker.status || 'pending'}</span>
+                </div>
+                <small>
+                  {[worker.provider, worker.model, worker.complexity]
+                    .filter(Boolean)
+                    .join(' · ') || 'routing pending'}
+                </small>
+                {worker.dependsOn.length > 0 && (
+                  <p>deps: {worker.dependsOn.join(' → ')}</p>
+                )}
+                {worker.waitingFor.length > 0 && (
+                  <p>waiting: {worker.waitingFor.join(', ')}</p>
+                )}
+                {worker.downstreamWaitingCount > 0 && (
+                  <p>downstream: {worker.downstreamWaitingCount}</p>
+                )}
+                {worker.reason && <p title={worker.reason}>{worker.reason}</p>}
+              </article>
             ))}
           </div>
         ))}
