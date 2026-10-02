@@ -166,7 +166,10 @@ export function App() {
   const thread = workspace?.conversations.find(
     (item) => item.id === selectedThread && item.dotId === dot?.id,
   );
-  const configured = !!workspace && workspace.setup.missing.length === 0;
+  const configured =
+    !!workspace &&
+    (workspace.setup.missing.length === 0 ||
+      (!!dot && dot.id === workspace.supervisorDotId));
   const chooseDot = (next: Dot) => {
     setSelectedDot(next.id);
     setSelectedThread(
@@ -581,6 +584,7 @@ export function App() {
                   paused={state.settings.paused}
                   onSaved={refresh}
                   onComputer={() => setPane(true)}
+                  supervisor={dot.id === workspace.supervisorDotId}
                   onSchedule={() =>
                     setDialog({ type: 'schedule', threadId: thread.id })
                   }

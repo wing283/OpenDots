@@ -67,6 +67,18 @@ async function bridgePost(
   });
 }
 
+async function bridgeGet(
+  config: PlatformConfig,
+  path: string,
+  signal: AbortSignal,
+) {
+  return fetch(new URL(path, config.supervisorAguiUrl), {
+    method: 'GET',
+    signal,
+    headers: bridgeHeaders(config),
+  });
+}
+
 function evidenceMarkdown(
   runId: string,
   evidence: z.infer<typeof evidenceEnvelope>['evidence'],
@@ -123,6 +135,33 @@ export function supervisorRoutes(
   workspace: WorkspaceStore,
 ) {
   const app = new Hono();
+
+  app.get('/supervisor/health', async (c) => {
+    if (!config.supervisorAguiUrl || !config.supervisorDotId)
+      return c.json({ error: 'Supervisor integration is not configured.' }, 404);
+    try {
+      const response = await bridgeGet(
+        config,
+        '/health',
+        AbortSignal.timeout(3000),
+      );
+      const body = (await response.json().catch(() => ({
+        error: 'Supervisor bridge returned an unreadable response.',
+      }))) as Record<string, unknown>;
+      return c.json(body, response.status as 200 | 401 | 500 | 503);
+    } catch (error) {
+      return c.json(
+        {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Supervisor bridge is unreachable.',
+        },
+        503,
+      );
+    }
+  });
 
   app.post('/supervisor/cancel', async (c) => {
     if (!config.supervisorAguiUrl || !config.supervisorDotId)

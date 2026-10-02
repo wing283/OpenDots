@@ -31,6 +31,7 @@ import { Mascot } from './Mascot';
 import { useVoice } from './useVoice';
 import { CallView } from './CallView';
 import { SupervisorRunPanel } from './SupervisorRunPanel';
+import { SupervisorHealthStatus } from './SupervisorHealthStatus';
 export function Chat({
   thread,
   dot,
@@ -42,6 +43,7 @@ export function Chat({
   onSaved,
   onSchedule,
   onComputer,
+  supervisor = false,
 }: {
   thread: Conversation;
   dot: Dot;
@@ -53,6 +55,7 @@ export function Chat({
   onSaved: () => void;
   onSchedule: () => void;
   onComputer?: () => void;
+  supervisor?: boolean;
 }) {
   const { agent, isReady } = useAgent({
     agentId: `chat-${thread.id}`,
@@ -300,6 +303,7 @@ export function Chat({
           </button>
         </div>
       </header>
+      <SupervisorHealthStatus enabled={supervisor} />
       <SupervisorRunPanel state={agent.state} />
       {pageContext && (
         <div className="page-chat-context">

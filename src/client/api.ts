@@ -1,4 +1,7 @@
-let token = sessionStorage.getItem('opendots-token') ?? '';
+let token =
+  typeof sessionStorage === 'undefined'
+    ? ''
+    : (sessionStorage.getItem('opendots-token') ?? '');
 export function setToken(value: string) {
   token = value;
   if (value) sessionStorage.setItem('opendots-token', value);

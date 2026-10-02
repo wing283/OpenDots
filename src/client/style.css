@@ -4220,3 +4220,45 @@ h3 {
   color: #b65f6c;
   font-size: 12px;
 }
+
+.supervisor-health {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 12px 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 11px;
+  background: #fafafa;
+}
+
+.supervisor-health strong {
+  flex: 0 0 auto;
+}
+
+.supervisor-health span {
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.supervisor-health code {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.supervisor-health.ready {
+  border-color: color-mix(in srgb, #3f8f68 45%, var(--line));
+}
+
+.supervisor-health.blocked,
+.supervisor-health.bad {
+  border-color: color-mix(in srgb, #b65f6c 45%, var(--line));
+}
+
+.supervisor-health.checking {
+  opacity: 0.75;
+}

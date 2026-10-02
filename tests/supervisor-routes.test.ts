@@ -190,3 +190,39 @@ it('rejects malformed cancel before contacting the bridge', async () => {
     workspace.close();
   }
 });
+
+it('proxies Supervisor bridge health with bearer auth', async () => {
+  const { workspace, config } = setup();
+  try {
+    const fetchMock = vi.fn(async (url: URL, init?: RequestInit) => {
+      expect(url.toString()).toBe('http://127.0.0.1:8791/health');
+      expect(init?.method).toBe('GET');
+      expect(init?.headers).toMatchObject({
+        Authorization: 'Bearer test-token',
+      });
+      return Response.json({
+        ok: true,
+        bridgeReady: true,
+        runReady: false,
+        version: '0.2',
+        execution: {
+          missingRequiredEnv: ['KIMI_API_KEY'],
+          activeCount: 0,
+          capacity: 3,
+        },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const app = supervisorRoutes(config, workspace);
+    const response = await app.request('/supervisor/health');
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      bridgeReady: true,
+      runReady: false,
+      version: '0.2',
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  } finally {
+    workspace.close();
+  }
+});

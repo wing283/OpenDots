@@ -43,18 +43,23 @@ export class Platform {
       this.requireReady();
       return this.intelligence!;
     });
-    if (!config.intelligenceKey) return;
-    this.intelligence = new CopilotKitIntelligence({
-      apiKey: config.intelligenceKey,
-      apiUrl: config.intelligenceApiUrl,
-      wsUrl: config.intelligenceWsUrl,
-      getLearningContainerId: learningSelector(
-        workspace,
-        config.slackDotId ?? workspace.dots()[0]?.id,
-      ),
-    });
+    if (config.intelligenceKey)
+      this.intelligence = new CopilotKitIntelligence({
+        apiKey: config.intelligenceKey,
+        apiUrl: config.intelligenceApiUrl,
+        wsUrl: config.intelligenceWsUrl,
+        getLearningContainerId: learningSelector(
+          workspace,
+          config.slackDotId ?? workspace.dots()[0]?.id,
+        ),
+      });
     const channels = [];
-    if (config.slackChannel && config.slackTeam && config.slackUsers.length) {
+    if (
+      this.intelligence &&
+      config.slackChannel &&
+      config.slackTeam &&
+      config.slackUsers.length
+    ) {
       const dotId = config.slackDotId ?? workspace.dots()[0].id;
       if (!workspace.dot(dotId))
         throw new Error('SLACK_DOT_ID does not identify an existing Dot.');
@@ -68,24 +73,27 @@ export class Platform {
       });
       channels.push(slack);
     }
-    const runtime = new CopilotRuntime({
-      intelligence: this.intelligence,
-      identifyUser: async () => ({
-        id: workspace.ownerId,
-        name: 'OpenDots owner',
-      }),
-      agents: async () =>
-        Object.fromEntries(
-          workspace
-            .dots()
-            .map((dot) => [
-              dot.id,
-              createWorkspaceAgent(store, workspace, config, dot.id),
-            ]),
-        ),
-      channels,
-      generateThreadNames: true,
-    });
+    const agents = async () =>
+      Object.fromEntries(
+        workspace
+          .dots()
+          .map((dot) => [
+            dot.id,
+            createWorkspaceAgent(store, workspace, config, dot.id),
+          ]),
+      );
+    const runtime = this.intelligence
+      ? new CopilotRuntime({
+          intelligence: this.intelligence,
+          identifyUser: async () => ({
+            id: workspace.ownerId,
+            name: 'OpenDots owner',
+          }),
+          agents,
+          channels,
+          generateThreadNames: true,
+        })
+      : new CopilotRuntime({ agents });
     this.handler = createCopilotHonoHandler({
       runtime,
       basePath: '/api/copilotkit',
@@ -102,8 +110,12 @@ export class Platform {
   }
   missingForDot(dotId?: string) {
     const missing = this.setup().missing;
-    if (dotId && dotId === this.config.supervisorDotId)
-      return missing.filter((item) => item === 'INTELLIGENCE_API_KEY');
+    if (
+      dotId &&
+      dotId === this.config.supervisorDotId &&
+      this.config.supervisorAguiUrl
+    )
+      return [];
     return missing;
   }
   requireReady(dotId?: string) {
@@ -131,6 +143,8 @@ export class Platform {
     if (!this.workspace.dot(dotId)) throw new Error('Dot not found.');
     this.requireReady(dotId);
     const id = randomUUID();
+    if (!this.intelligence && dotId === this.config.supervisorDotId)
+      return this.workspace.bindThread(id, dotId, title);
     try {
       await this.intelligence!.createThread({
         threadId: id,
@@ -148,6 +162,8 @@ export class Platform {
   async history(threadId: string): Promise<string> {
     const thread = this.workspace.requireThread(threadId);
     this.requireReady(thread.dotId);
+    if (!this.intelligence && thread.dotId === this.config.supervisorDotId)
+      return '';
     const history = await this.intelligence!.getThreadMessages({
       threadId,
       userId: this.workspace.ownerId,
@@ -195,8 +211,8 @@ export class Platform {
     signal: AbortSignal,
     metadata?: Record<string, unknown>,
   ): Promise<string> {
-    this.requireReady();
     const thread = this.workspace.requireThread(threadId);
+    this.requireReady(thread.dotId);
     return runThreadTurn(
       this.config.runtimeUrl,
       this.config.ownerToken

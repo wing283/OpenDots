@@ -114,5 +114,6 @@ export interface WorkspaceState {
   dots: Dot[];
   conversations: Conversation[];
   setup: SetupStatus;
+  supervisorDotId?: string;
   calls: CallReceipt[];
 }

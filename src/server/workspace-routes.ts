@@ -28,6 +28,7 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
       dots: platform.workspace.dots(),
       conversations: platform.workspace.conversations(),
       setup: platform.setup(),
+      supervisorDotId: platform.config.supervisorDotId,
       calls: platform.workspace.calls(),
     }),
   );
@@ -127,9 +128,10 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
       .safeParse(await c.req.json());
     if (!data.success)
       return c.json({ error: 'Select a Dot and a conversation title.' }, 400);
-    if (platform.setup().missing.length)
+    const missing = platform.missingForDot(data.data.dotId);
+    if (missing.length)
       return c.json(
-        { error: `Setup required: ${platform.setup().missing.join(', ')}.` },
+        { error: `Setup required: ${missing.join(', ')}.` },
         503,
       );
     return c.json(

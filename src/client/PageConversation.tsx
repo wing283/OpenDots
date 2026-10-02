@@ -111,6 +111,7 @@ export function PageConversation({
           calls={workspace.calls.filter((call) => call.threadId === thread.id)}
           paused={paused}
           onSaved={onRefresh}
+          supervisor={dot.id === workspace.supervisorDotId}
           onSchedule={() => onSchedule(thread.id)}
         />
       </aside>
@@ -122,7 +123,10 @@ export function PageConversation({
         <button onClick={onCreateDot}>Create specialist</button>
       </div>
     );
-  if (workspace.setup.missing.length)
+  if (
+    workspace.setup.missing.length &&
+    dot.id !== workspace.supervisorDotId
+  )
     return (
       <div className="document-chat-setup">
         <span>Connect your assistant to chat about this page.</span>
