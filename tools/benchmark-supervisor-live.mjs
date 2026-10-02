@@ -8,12 +8,21 @@ function arg(name, fallback = '') {
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
 }
 
+function runState() {
+  return {
+    workers: Number(arg('--workers', '1')),
+    maxParallel: Number(arg('--max-parallel', '1')),
+    verify: arg('--verify', 'false') === 'true',
+    synthesize: arg('--synthesize', 'false') === 'true',
+  };
+}
+
 function input(prompt, label) {
   return {
     threadId: `${label}-${randomUUID()}`,
     runId: `run-${randomUUID()}`,
     messages: [{ id: randomUUID(), role: 'user', content: prompt }],
-    state: {},
+    state: runState(),
     tools: [],
     context: [],
     forwardedProps: {},
@@ -63,6 +72,7 @@ async function proxied(runtimeUrl, runtimeAgentId, threadId, prompt) {
     runtimeAgentId,
   });
   agent.threadId = threadId;
+  agent.setState(runState());
   agent.addMessage({ id: randomUUID(), role: 'user', content: prompt });
   let snapshot = {};
   let runError = null;
@@ -126,6 +136,7 @@ console.log(
         tokens: openDotsResult.tokens - directResult.tokens,
         costUsd: Number((openDotsResult.costUsd - directResult.costUsd).toFixed(6)),
       },
+      runState: runState(),
       note:
         'Distinct benchmark_nonce values avoid exact-goal Result Cache reuse between paired runs.',
     },
