@@ -75,7 +75,9 @@ async function runOne({
   const snapshots = [];
   const sub = agent.subscribe({
     onStateSnapshotEvent: ({ event }) => {
-      snapshot = event.snapshot || {};
+      const next = event.snapshot || {};
+      if (next.bridge !== 'supervisor-agui') return;
+      snapshot = next;
       snapshots.push(snapshot);
       if (onSnapshot) void onSnapshot(snapshot);
     },
@@ -127,6 +129,32 @@ if (!base || !runtime || !dotId)
   throw new Error('Required: --base --runtime --agent-id');
 
 const results = {};
+
+if (mode === 'plan-cache-small') {
+  const prompt = [
+    'Supervisor cache regression. Create exactly two independent read_only light workers with depends_on=[] and preserve these IDs exactly.',
+    '1) calc_small: compute 37 + 58 and verify the addition with a second method.',
+    '2) format_small: convert the exact input words alpha, beta, gamma into a JSON array of three strings and verify the array length is 3.',
+    'Do not create files, do not use a writer, and do not add dependencies.',
+  ].join('\n');
+  const state = { workers: 2, maxParallel: 2, verify: false, synthesize: false };
+  results.planCacheSmallFirst = await runOne({
+    base,
+    runtime,
+    dotId,
+    title: 'Plan cache small 1',
+    prompt,
+    state,
+  });
+  results.planCacheSmallSecond = await runOne({
+    base,
+    runtime,
+    dotId,
+    title: 'Plan cache small 2',
+    prompt,
+    state,
+  });
+}
 
 if (mode === 'all' || mode === 'dag-cache') {
   const prompt = [
