@@ -123,10 +123,7 @@ export function PageConversation({
         <button onClick={onCreateDot}>Create specialist</button>
       </div>
     );
-  if (
-    workspace.setup.missing.length &&
-    dot.id !== workspace.supervisorDotId
-  )
+  if (workspace.setup.missing.length && dot.id !== workspace.supervisorDotId)
     return (
       <div className="document-chat-setup">
         <span>Connect your assistant to chat about this page.</span>
