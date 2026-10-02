@@ -9,6 +9,7 @@ import { configured, type Config } from './research.js';
 import type { Platform } from './platform.js';
 import { VoiceService } from './voice.js';
 import { workspaceRoutes } from './workspace-routes.js';
+import { supervisorRoutes } from './supervisor-routes.js';
 const interval = z.number().int().min(60).max(31_536_000).nullable();
 export interface AppOptions {
   store: Store;
@@ -73,7 +74,10 @@ export function createApp({
       return c.json({ error: 'Use application/json.' }, 415);
     await next();
   });
-  if (platform) app.route('/api', computerRoutes(platform.computers));
+  if (platform) {
+    app.route('/api', computerRoutes(platform.computers));
+    app.route('/api', supervisorRoutes(platform.config));
+  }
   const voice = platform ? new VoiceService(platform) : undefined;
   if (platform && voice) app.route('/api', workspaceRoutes(platform, voice));
   app.get('/api/state', (c) =>

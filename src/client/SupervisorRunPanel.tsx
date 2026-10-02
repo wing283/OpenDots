@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 type Worker = {
   id: string;
   title: string;
@@ -27,6 +29,11 @@ export type SupervisorSnapshot = {
   workers: Worker[];
   eventCounts: Record<string, number>;
   lastEvent?: { type?: string; at?: string; workerId?: string };
+  approval?: {
+    status?: string;
+    decision?: string;
+    writers?: Array<{ id?: string; title?: string; goal?: string }>;
+  };
 };
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -91,6 +98,7 @@ export function supervisorSnapshot(value: unknown): SupervisorSnapshot | null {
         .map(([key, value]) => [key, Number(value)]),
     ),
     lastEvent: record(raw.lastEvent) as SupervisorSnapshot['lastEvent'],
+    approval: record(raw.approval) as SupervisorSnapshot['approval'],
   };
 }
 
@@ -103,6 +111,8 @@ function tone(worker: Worker): string {
 }
 
 export function SupervisorRunPanel({ state }: { state: unknown }) {
+  const [approvalBusy, setApprovalBusy] = useState(false);
+  const [approvalError, setApprovalError] = useState('');
   const snapshot = supervisorSnapshot(state);
   if (!snapshot) return null;
   const totalTokens = snapshot.workers.reduce((sum, item) => sum + item.tokens, 0);
@@ -115,6 +125,25 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
   const cacheHits = snapshot.eventCounts.CACHE_HIT ?? 0;
   const cacheMisses = snapshot.eventCounts.CACHE_MISS ?? 0;
   const evidence = snapshot.eventCounts.EVIDENCE_RECORDED ?? 0;
+  const approvalPending = snapshot.approval?.status === 'pending';
+  const resolveApproval = async (decision: 'approve' | 'decline') => {
+    if (!snapshot.supervisorRunId || approvalBusy) return;
+    setApprovalBusy(true);
+    setApprovalError('');
+    try {
+      const { api } = await import('./api');
+      await api('/supervisor/approval', 'POST', {
+        supervisorRunId: snapshot.supervisorRunId,
+        decision,
+      });
+    } catch (error) {
+      setApprovalError(
+        error instanceof Error ? error.message : 'Approval request failed.',
+      );
+    } finally {
+      setApprovalBusy(false);
+    }
+  };
 
   return (
     <section className="supervisor-run-panel" aria-label="Supervisor workflow">
@@ -132,6 +161,37 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
         <span>cache {cacheHits}/{cacheMisses}</span>
         <span>{evidence} evidence</span>
       </div>
+      {approvalPending && (
+        <div className="supervisor-approval" role="alert">
+          <div>
+            <strong>Writer approval required</strong>
+            <span>
+              {(snapshot.approval?.writers ?? [])
+                .map((writer) => writer.title || writer.id)
+                .filter(Boolean)
+                .join(', ') || 'A writer step is waiting for approval.'}
+            </span>
+          </div>
+          <div className="supervisor-approval-actions">
+            <button
+              type="button"
+              disabled={approvalBusy}
+              onClick={() => void resolveApproval('decline')}
+            >
+              Decline
+            </button>
+            <button
+              type="button"
+              className="primary"
+              disabled={approvalBusy}
+              onClick={() => void resolveApproval('approve')}
+            >
+              Approve
+            </button>
+          </div>
+          {approvalError && <p>{approvalError}</p>}
+        </div>
+      )}
       <div className="supervisor-dag-grid">
         {snapshot.workers.map((worker) => (
           <article

@@ -4093,3 +4093,38 @@ h3 {
     grid-template-columns: 1fr;
   }
 }
+
+.supervisor-approval {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.supervisor-approval > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+.supervisor-approval span,
+.supervisor-approval p {
+  font-size: 12px;
+  color: var(--muted);
+}
+.supervisor-approval-actions {
+  display: flex;
+  gap: 8px;
+}
+.supervisor-approval-actions button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 11px;
+  background: transparent;
+  color: inherit;
+}
+.supervisor-approval-actions button.primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
