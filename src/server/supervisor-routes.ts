@@ -106,8 +106,13 @@ function evidenceMarkdown(
   return lines.join('\n').slice(0, 100000);
 }
 
-function ensureEvidenceSpace(config: PlatformConfig, workspace: WorkspaceStore) {
-  let space = workspace.spaces().find((item) => item.name === 'Supervisor Evidence');
+function ensureEvidenceSpace(
+  config: PlatformConfig,
+  workspace: WorkspaceStore,
+) {
+  let space = workspace
+    .spaces()
+    .find((item) => item.name === 'Supervisor Evidence');
   if (!space)
     space = workspace.createSpace(
       'Supervisor Evidence',
@@ -138,7 +143,10 @@ export function supervisorRoutes(
 
   app.get('/supervisor/health', async (c) => {
     if (!config.supervisorAguiUrl || !config.supervisorDotId)
-      return c.json({ error: 'Supervisor integration is not configured.' }, 404);
+      return c.json(
+        { error: 'Supervisor integration is not configured.' },
+        404,
+      );
     try {
       const response = await bridgeGet(
         config,
@@ -165,7 +173,10 @@ export function supervisorRoutes(
 
   app.post('/supervisor/cancel', async (c) => {
     if (!config.supervisorAguiUrl || !config.supervisorDotId)
-      return c.json({ error: 'Supervisor integration is not configured.' }, 404);
+      return c.json(
+        { error: 'Supervisor integration is not configured.' },
+        404,
+      );
 
     const parsed = cancelRef.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success)
@@ -185,7 +196,10 @@ export function supervisorRoutes(
 
   app.post('/supervisor/approval', async (c) => {
     if (!config.supervisorAguiUrl || !config.supervisorDotId)
-      return c.json({ error: 'Supervisor integration is not configured.' }, 404);
+      return c.json(
+        { error: 'Supervisor integration is not configured.' },
+        404,
+      );
 
     const parsed = approval.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success)
@@ -205,7 +219,10 @@ export function supervisorRoutes(
 
   app.post('/supervisor/evidence', async (c) => {
     if (!config.supervisorAguiUrl || !config.supervisorDotId)
-      return c.json({ error: 'Supervisor integration is not configured.' }, 404);
+      return c.json(
+        { error: 'Supervisor integration is not configured.' },
+        404,
+      );
     const parsed = runRef.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success)
       return c.json({ error: 'Invalid Supervisor evidence request.' }, 400);
@@ -226,7 +243,10 @@ export function supervisorRoutes(
       );
     const projection = evidenceEnvelope.safeParse(raw);
     if (!projection.success)
-      return c.json({ error: 'Supervisor evidence response was invalid.' }, 502);
+      return c.json(
+        { error: 'Supervisor evidence response was invalid.' },
+        502,
+      );
 
     const space = ensureEvidenceSpace(config, workspace);
     const title = `Supervisor Run ${parsed.data.supervisorRunId}`;
