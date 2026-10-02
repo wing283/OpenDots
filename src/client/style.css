@@ -4128,3 +4128,29 @@ h3 {
   color: white;
   border-color: var(--accent);
 }
+
+.supervisor-evidence-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: -2px 0 10px;
+}
+
+.supervisor-evidence-actions button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+}
+
+.supervisor-evidence-actions button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.supervisor-evidence-actions span {
+  color: var(--muted);
+  font-size: 12px;
+}
