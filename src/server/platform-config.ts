@@ -19,6 +19,9 @@ export interface PlatformConfig {
   slackTeam?: string;
   slackUsers: string[];
   slackDotId?: string;
+  supervisorAguiUrl?: string;
+  supervisorAguiToken?: string;
+  supervisorDotId?: string;
   runtimeUrl: string;
   ownerToken?: string;
 }

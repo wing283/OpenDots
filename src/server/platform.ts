@@ -11,7 +11,10 @@ import { createSlackChannel } from './slack-channel.js';
 export { slackIdentity } from './slack-channel.js';
 import { Store } from './store.js';
 import { WorkspaceStore } from './workspace.js';
-import { DotAgent } from './dot-agent.js';
+import {
+  createWorkspaceAgent,
+  validateSupervisorAgentConfig,
+} from './agent-factory.js';
 import { runThreadTurn } from './headless.js';
 import { setupStatus, type PlatformConfig } from './platform-config.js';
 import { validateRuntimeScope } from './runtime-scope.js';
@@ -27,6 +30,10 @@ export class Platform {
     readonly workspace: WorkspaceStore,
     readonly config: PlatformConfig,
   ) {
+    validateSupervisorAgentConfig(
+      config,
+      workspace.dots().map((dot) => dot.id),
+    );
     this.computers = new ComputerService(
       workspace,
       config,
@@ -56,7 +63,8 @@ export class Platform {
         config,
         ownerId: workspace.ownerId,
         paused: () => store.settings().paused,
-        agent: () => new DotAgent(store, workspace, config, dotId, true),
+        agent: () =>
+          createWorkspaceAgent(store, workspace, config, dotId, true),
       });
       channels.push(slack);
     }
@@ -72,7 +80,7 @@ export class Platform {
             .dots()
             .map((dot) => [
               dot.id,
-              new DotAgent(store, workspace, config, dot.id),
+              createWorkspaceAgent(store, workspace, config, dot.id),
             ]),
         ),
       channels,

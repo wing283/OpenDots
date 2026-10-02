@@ -47,6 +47,9 @@ const config: PlatformConfig = {
     .map((value) => value.trim())
     .filter(Boolean),
   slackDotId: process.env.SLACK_DOT_ID || undefined,
+  supervisorAguiUrl: process.env.SUPERVISOR_AGUI_URL || undefined,
+  supervisorAguiToken: process.env.SUPERVISOR_AGUI_TOKEN || undefined,
+  supervisorDotId: process.env.SUPERVISOR_DOT_ID || undefined,
   runtimeUrl: `http://${host === '::1' ? '[::1]' : '127.0.0.1'}:${port}/api/copilotkit`,
   ownerToken,
 };
