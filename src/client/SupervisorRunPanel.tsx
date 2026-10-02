@@ -113,6 +113,12 @@ function tone(worker: Worker): string {
 export function SupervisorRunPanel({ state }: { state: unknown }) {
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [approvalError, setApprovalError] = useState('');
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
+  const [evidenceError, setEvidenceError] = useState('');
+  const [savedEvidence, setSavedEvidence] = useState<{
+    spaceId: string;
+    pageId: string;
+  } | null>(null);
   const snapshot = supervisorSnapshot(state);
   if (!snapshot) return null;
   const totalTokens = snapshot.workers.reduce((sum, item) => sum + item.tokens, 0);
@@ -126,6 +132,31 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
   const cacheMisses = snapshot.eventCounts.CACHE_MISS ?? 0;
   const evidence = snapshot.eventCounts.EVIDENCE_RECORDED ?? 0;
   const approvalPending = snapshot.approval?.status === 'pending';
+  const saveEvidence = async () => {
+    if (!snapshot.supervisorRunId || evidenceBusy || evidence <= 0) return;
+    setEvidenceBusy(true);
+    setEvidenceError('');
+    try {
+      const { api } = await import('./api');
+      const result = await api<{
+        space: { id: string };
+        page: { id: string; spaceId: string };
+      }>('/supervisor/evidence', 'POST', {
+        supervisorRunId: snapshot.supervisorRunId,
+      });
+      setSavedEvidence({
+        spaceId: result.space.id,
+        pageId: result.page.id,
+      });
+    } catch (error) {
+      setEvidenceError(
+        error instanceof Error ? error.message : 'Evidence save failed.',
+      );
+    } finally {
+      setEvidenceBusy(false);
+    }
+  };
+
   const resolveApproval = async (decision: 'approve' | 'decline') => {
     if (!snapshot.supervisorRunId || approvalBusy) return;
     setApprovalBusy(true);
@@ -161,6 +192,29 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
         <span>cache {cacheHits}/{cacheMisses}</span>
         <span>{evidence} evidence</span>
       </div>
+      {evidence > 0 && snapshot.supervisorRunId && (
+        <div className="supervisor-evidence-actions">
+          <button
+            type="button"
+            disabled={evidenceBusy}
+            onClick={() => void saveEvidence()}
+          >
+            {evidenceBusy ? 'Saving evidence…' : 'Save evidence'}
+          </button>
+          {savedEvidence && (
+            <button
+              type="button"
+              onClick={() => {
+                location.hash =
+                  `/spaces/${savedEvidence.spaceId}/pages/${savedEvidence.pageId}`;
+              }}
+            >
+              Open evidence
+            </button>
+          )}
+          {evidenceError && <span>{evidenceError}</span>}
+        </div>
+      )}
       {approvalPending && (
         <div className="supervisor-approval" role="alert">
           <div>
