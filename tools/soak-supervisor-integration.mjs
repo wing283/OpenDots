@@ -29,6 +29,33 @@ async function createThread(base, dotId, title) {
   });
 }
 
+function summarizeCustomEvents(customEvents) {
+  const names = customEvents.map((event) => event.name);
+  const count = (name) => names.filter((item) => item === name).length;
+  const cache = customEvents
+    .filter((event) =>
+      ['sv.cache.hit', 'sv.cache.miss', 'sv.cache.store', 'sv.cache.store.skipped', 'sv.cache.bypass'].includes(event.name),
+    )
+    .map((event) => ({
+      name: event.name,
+      workerId: event.value?.workerId || '',
+      key: event.value?.payload?.key || '',
+      reason: event.value?.payload?.reason || '',
+      sourceRunId: event.value?.payload?.source_run_id || '',
+    }));
+  return {
+    names,
+    cache,
+    cacheHits: count('sv.cache.hit'),
+    cacheMisses: count('sv.cache.miss'),
+    cacheStores: count('sv.cache.store'),
+    cacheStoreSkipped: count('sv.cache.store.skipped'),
+    cacheBypasses: count('sv.cache.bypass'),
+    approvalRequired: count('sv.approval.required'),
+    approvalResolved: count('sv.approval.resolved'),
+  };
+}
+
 function sumTokenCost(customEvents) {
   const report = [...customEvents]
     .reverse()
@@ -98,6 +125,7 @@ async function runOne({
   }
   const wallMs = performance.now() - started;
   const evidence = await projectEvidence(base, snapshot.supervisorRunId);
+  const customSummary = summarizeCustomEvents(customEvents);
   return {
     threadId: thread.id,
     wallMs: Number(wallMs.toFixed(3)),
@@ -115,7 +143,7 @@ async function runOne({
         }
       : null,
     ...sumTokenCost(customEvents),
-    customEventNames: customEvents.map((event) => event.name),
+    ...customSummary,
     snapshots: snapshots.length,
   };
 }
@@ -183,6 +211,30 @@ if (mode === 'all' || mode === 'dag-cache') {
     prompt,
     state,
   });
+  const firstStoreKeys = Object.fromEntries(
+    results.dagCacheFirst.cache
+      .filter((item) => item.name === 'sv.cache.store')
+      .map((item) => [item.workerId, item.key]),
+  );
+  const secondLookupKeys = Object.fromEntries(
+    results.dagCacheSecond.cache
+      .filter((item) => ['sv.cache.hit', 'sv.cache.miss'].includes(item.name))
+      .map((item) => [item.workerId, item.key]),
+  );
+  results.cacheKeyComparison = Object.fromEntries(
+    [...new Set([...Object.keys(firstStoreKeys), ...Object.keys(secondLookupKeys)])].map(
+      (workerId) => [
+        workerId,
+        {
+          firstStoreKey: firstStoreKeys[workerId] || '',
+          secondLookupKey: secondLookupKeys[workerId] || '',
+          same:
+            !!firstStoreKeys[workerId] &&
+            firstStoreKeys[workerId] === secondLookupKeys[workerId],
+        },
+      ],
+    ),
+  );
 }
 
 if (mode === 'all' || mode === 'writer-approval') {
