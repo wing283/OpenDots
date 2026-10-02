@@ -1,0 +1,29 @@
+name: Supervisor Integration CI
+
+on:
+  push:
+    branches:
+      - feature/supervisor-integration
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Run Supervisor integration tests
+        run: npx vitest run tests/supervisor-agent.test.ts tests/supervisor-health-status.test.tsx tests/supervisor-local-runtime.test.ts tests/supervisor-routes.test.ts tests/supervisor-run-panel.test.tsx
+      - run: node --check tools/benchmark-supervisor-transport.mjs
+      - run: node --check tools/benchmark-supervisor-live.mjs
+      - run: node --check tools/soak-supervisor-integration.mjs
+      - run: npm run build
