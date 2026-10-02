@@ -95,9 +95,7 @@ it('groups workers into dependency layers', () => {
     tokens: 0,
     ...worker,
   }));
-  expect(dagLayers(workers).map((layer) => layer.map((worker) => worker.id))).toEqual([
-    ['a'],
-    ['b', 'c'],
-    ['d'],
-  ]);
+  expect(
+    dagLayers(workers).map((layer) => layer.map((worker) => worker.id)),
+  ).toEqual([['a'], ['b', 'c'], ['d']]);
 });
