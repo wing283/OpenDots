@@ -30,6 +30,7 @@ import type { CallReceipt, Conversation, Dot } from '../shared/types';
 import { Mascot } from './Mascot';
 import { useVoice } from './useVoice';
 import { CallView } from './CallView';
+import { SupervisorRunPanel } from './SupervisorRunPanel';
 export function Chat({
   thread,
   dot,
@@ -299,6 +300,7 @@ export function Chat({
           </button>
         </div>
       </header>
+      <SupervisorRunPanel state={agent.state} />
       {pageContext && (
         <div className="page-chat-context">
           Working on{' '}

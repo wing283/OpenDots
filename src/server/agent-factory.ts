@@ -1,4 +1,8 @@
-import { HttpAgent, type AbstractAgent } from '@ag-ui/client';
+import {
+  HttpAgent,
+  type AbstractAgent,
+  type HttpAgentConfig,
+} from '@ag-ui/client';
 import { DotAgent } from './dot-agent.js';
 import type { PlatformConfig } from './platform-config.js';
 import { Store } from './store.js';
@@ -6,6 +10,36 @@ import { WorkspaceStore } from './workspace.js';
 
 function loopback(hostname: string): boolean {
   return ['127.0.0.1', '::1', 'localhost'].includes(hostname);
+}
+
+export class SupervisorHttpAgent extends HttpAgent {
+  constructor(config: HttpAgentConfig) {
+    super(config);
+  }
+
+  abortRun(): void {
+    const state = this.state as Record<string, unknown>;
+    const supervisorRunId = String(state.supervisorRunId ?? '');
+    const supervisorPid = Number(state.supervisorPid ?? 0);
+    const bridgeRunId = String(state.bridgeRunId ?? '');
+    if (supervisorRunId || supervisorPid > 0) {
+      const cancelUrl = new URL('/cancel', this.url).toString();
+      void this.fetch(cancelUrl, {
+        method: 'POST',
+        headers: {
+          ...this.headers,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          bridgeRunId,
+          supervisorRunId,
+          supervisorPid,
+        }),
+      }).catch(() => undefined);
+    }
+    super.abortRun();
+  }
 }
 
 export function validateSupervisorAgentConfig(
@@ -47,7 +81,7 @@ export function createWorkspaceAgent(
     config.supervisorDotId &&
     dotId === config.supervisorDotId
   ) {
-    return new HttpAgent({
+    return new SupervisorHttpAgent({
       agentId: dotId,
       url: config.supervisorAguiUrl,
       headers: config.supervisorAguiToken

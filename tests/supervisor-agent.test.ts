@@ -1,7 +1,8 @@
 import { HttpAgent } from '@ag-ui/client';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import {
   createWorkspaceAgent,
+  SupervisorHttpAgent,
   validateSupervisorAgentConfig,
 } from '../src/server/agent-factory.js';
 import { DotAgent } from '../src/server/dot-agent.js';
@@ -56,6 +57,37 @@ it('creates an authenticated HttpAgent only for the configured Supervisor Dot', 
   expect(http.agentId).toBe('supervisor');
   expect(http.url).toBe('https://supervisor.example.com/');
   expect(http.headers).toEqual({ Authorization: 'Bearer secret' });
+});
+
+it('sends an explicit per-run cancel request before aborting transport', () => {
+  const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+  const agent = new SupervisorHttpAgent({
+    url: 'http://127.0.0.1:8791/',
+    headers: { Authorization: 'Bearer secret' },
+    fetch: fetchMock,
+  });
+  agent.setState({
+    bridgeRunId: 'bridge-1',
+    supervisorRunId: 'sv-1',
+    supervisorPid: 123,
+  });
+  agent.abortRun();
+  expect(fetchMock).toHaveBeenCalledOnce();
+  const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
+  const [url, init] = calls[0]!;
+  expect(url).toBe('http://127.0.0.1:8791/cancel');
+  expect(init).toMatchObject({
+    method: 'POST',
+    headers: expect.objectContaining({
+      Authorization: 'Bearer secret',
+      'Content-Type': 'application/json',
+    }),
+  });
+  expect(JSON.parse(String(init.body))).toMatchObject({
+    bridgeRunId: 'bridge-1',
+    supervisorRunId: 'sv-1',
+    supervisorPid: 123,
+  });
 });
 
 it('keeps ordinary Dots on the built-in DotAgent', () => {
