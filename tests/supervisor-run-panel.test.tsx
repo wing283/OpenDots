@@ -63,6 +63,7 @@ it('renders Supervisor DAG state, costs, cache and dependencies', () => {
   expect(html).toContain('$0.3750');
   expect(html).toContain('cache 2/1');
   expect(html).toContain('3 evidence');
+  expect(html).toContain('Save evidence');
   expect(html).toContain('deps: planner');
   expect(html).toContain('critical');
 });
