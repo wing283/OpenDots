@@ -88,13 +88,77 @@ for (let i = 0; i < repeats; i++) {
 
 const d = stats(direct);
 const p = stats(proxied);
+const steadyDirect = stats(await directSeries(directUrl, repeats, warmup));
+const steadyProxy = stats(
+  await proxiedSeries(runtimeUrl, runtimeAgentId, threadId, repeats, warmup),
+);
+const delta = (a, b) => ({
+  meanMs: Number((b.meanMs - a.meanMs).toFixed(3)),
+  medianMs: Number((b.medianMs - a.medianMs).toFixed(3)),
+  p95Ms: Number((b.p95Ms - a.p95Ms).toFixed(3)),
+});
 const result = {
-  direct: d,
-  viaOpenDots: p,
-  overhead: {
-    meanMs: Number((p.meanMs - d.meanMs).toFixed(3)),
-    medianMs: Number((p.medianMs - d.medianMs).toFixed(3)),
-    p95Ms: Number((p.p95Ms - d.p95Ms).toFixed(3)),
+  coldStart: {
+    direct: d,
+    viaOpenDots: p,
+    overhead: delta(d, p),
+  },
+  steadyState: {
+    direct: steadyDirect,
+    viaOpenDots: steadyProxy,
+    overhead: delta(steadyDirect, steadyProxy),
   },
 };
 console.log(JSON.stringify(result, null, 2));
+
+
+async function directSeries(url, count, warmupCount) {
+  const agent = new HttpAgent({ url });
+  const values = [];
+  const one = async () => {
+    const input = {
+      threadId: 'direct-steady-thread',
+      runId: `run-${randomUUID()}`,
+      messages: [{ id: randomUUID(), role: 'user', content: 'transport benchmark' }],
+      state: {},
+      tools: [],
+      context: [],
+      forwardedProps: {},
+    };
+    const start = performance.now();
+    await new Promise((resolve, reject) => {
+      agent.run(input).subscribe({ error: reject, complete: resolve });
+    });
+    return performance.now() - start;
+  };
+  for (let i = 0; i < warmupCount; i++) await one();
+  for (let i = 0; i < count; i++) values.push(await one());
+  return values;
+}
+
+async function proxiedSeries(runtimeUrl, runtimeAgentId, threadId, count, warmupCount) {
+  const agent = new ProxiedCopilotRuntimeAgent({
+    runtimeUrl,
+    agentId: 'bench-steady',
+    runtimeAgentId,
+  });
+  agent.threadId = threadId;
+  const values = [];
+  const one = async () => {
+    agent.addMessage({
+      id: randomUUID(),
+      role: 'user',
+      content: 'transport benchmark',
+    });
+    const start = performance.now();
+    await agent.runAgent();
+    return performance.now() - start;
+  };
+  try {
+    for (let i = 0; i < warmupCount; i++) await one();
+    for (let i = 0; i < count; i++) values.push(await one());
+  } finally {
+    await agent.detachActiveRun();
+  }
+  return values;
+}
