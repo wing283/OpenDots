@@ -180,8 +180,7 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
     (sum, item) => sum + item.costUsd,
     0,
   );
-  const hasTokenCostReport =
-    (snapshot.eventCounts.TOKEN_COST_REPORT ?? 0) > 0;
+  const hasTokenCostReport = (snapshot.eventCounts.TOKEN_COST_REPORT ?? 0) > 0;
   const totalTokens = hasTokenCostReport
     ? snapshot.runMetrics?.actualTokens ?? 0
     : workerTokens;
