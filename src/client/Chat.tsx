@@ -258,6 +258,7 @@ export function Chat({
 
         agent.setState(restored);
         setRunning(restored.running);
+        setError('');
         setSupervisorRecoveryReady(true);
         trackingActiveRun = restored.running;
 
@@ -266,6 +267,7 @@ export function Chat({
         if (!active) return;
         if (error instanceof ApiError && error.status === 404) {
           // No prior binding is the normal case for a fresh Supervisor thread.
+          setError('');
           setSupervisorRecoveryReady(true);
           trackingActiveRun = false;
           return;
@@ -276,7 +278,7 @@ export function Chat({
             ? `Supervisor state restore failed: ${error.message}`
             : 'Supervisor state restore failed.',
         );
-        if (trackingActiveRun) scheduleRefresh();
+        scheduleRefresh();
       }
     };
 
