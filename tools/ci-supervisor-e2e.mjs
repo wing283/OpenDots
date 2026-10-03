@@ -264,6 +264,30 @@ try {
       `Writer decline soak verdict failed: ${JSON.stringify(writerDeclineSoak.writerDeclineVerdict)}`,
     );
 
+  const declinedRestoreResponse = await fetch(
+    `http://127.0.0.1:${appPort}/api/supervisor/thread-status`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        threadId: writerDeclineSoak.writerDecline.threadId,
+      }),
+    },
+  );
+  if (!declinedRestoreResponse.ok)
+    throw new Error(
+      `Declined thread restore failed: ${declinedRestoreResponse.status} ${await declinedRestoreResponse.text()}`,
+    );
+  const declinedRestore = await declinedRestoreResponse.json();
+  if (
+    declinedRestore.bindingStatus !== 'declined' ||
+    declinedRestore.snapshot?.approval?.status !== 'declined' ||
+    declinedRestore.snapshot?.running !== false
+  )
+    throw new Error(
+      `Declined thread restore mismatch: ${JSON.stringify(declinedRestore)}`,
+    );
+
   const cancelSoak = await runSoakMode('cancel', dotId, appPort);
   if (cancelSoak.cancelVerdict?.pass !== true)
     throw new Error(
@@ -294,6 +318,12 @@ try {
         dagCacheVerdict: dagCacheSoak.dagCacheVerdict,
         writerApprovalVerdict: writerSoak.writerApprovalVerdict,
         writerDeclineVerdict: writerDeclineSoak.writerDeclineVerdict,
+        declinedRestore: {
+          bindingStatus: declinedRestore.bindingStatus,
+          correlationState: declinedRestore.correlationState,
+          approvalStatus: declinedRestore.snapshot?.approval?.status,
+          running: declinedRestore.snapshot?.running,
+        },
         cancelVerdict: cancelSoak.cancelVerdict,
       },
       null,
