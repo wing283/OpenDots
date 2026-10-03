@@ -28,6 +28,12 @@ export type SupervisorSnapshot = {
   capacity: number;
   workers: Worker[];
   eventCounts: Record<string, number>;
+  runMetrics?: {
+    actualTokens: number;
+    actualCostUsd: number;
+    baselineCostUsd: number;
+    costSavingsPercent: number;
+  };
   lastEvent?: { type?: string; at?: string; workerId?: string };
   approval?: {
     status?: string;
@@ -85,6 +91,7 @@ export function supervisorSnapshot(value: unknown): SupervisorSnapshot | null {
       })
     : [];
   const counts = record(raw.eventCounts) ?? {};
+  const runMetrics = record(raw.runMetrics) ?? {};
   return {
     bridge: 'supervisor-agui',
     bridgeRunId: text(raw.bridgeRunId),
@@ -99,6 +106,12 @@ export function supervisorSnapshot(value: unknown): SupervisorSnapshot | null {
         .filter(([, value]) => typeof value === 'number')
         .map(([key, value]) => [key, Number(value)]),
     ),
+    runMetrics: {
+      actualTokens: number(runMetrics.actualTokens),
+      actualCostUsd: number(runMetrics.actualCostUsd),
+      baselineCostUsd: number(runMetrics.baselineCostUsd),
+      costSavingsPercent: number(runMetrics.costSavingsPercent),
+    },
     lastEvent: record(raw.lastEvent) as SupervisorSnapshot['lastEvent'],
     approval: record(raw.approval) as SupervisorSnapshot['approval'],
   };
@@ -155,14 +168,24 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
   } | null>(null);
   const snapshot = supervisorSnapshot(state);
   if (!snapshot) return null;
-  const totalTokens = snapshot.workers.reduce(
+  const workerTokens = snapshot.workers.reduce(
     (sum, item) => sum + item.tokens,
     0,
   );
-  const totalCost = snapshot.workers.reduce(
+  const workerCost = snapshot.workers.reduce(
     (sum, item) => sum + item.costUsd,
     0,
   );
+  const hasTokenCostReport =
+    (snapshot.eventCounts.TOKEN_COST_REPORT ?? 0) > 0;
+  const totalTokens = hasTokenCostReport
+    ? snapshot.runMetrics?.actualTokens ?? 0
+    : workerTokens;
+  const totalCost = hasTokenCostReport
+    ? snapshot.runMetrics?.actualCostUsd ?? 0
+    : workerCost;
+  const baselineCost = snapshot.runMetrics?.baselineCostUsd ?? 0;
+  const savingsPercent = snapshot.runMetrics?.costSavingsPercent ?? 0;
   const completed = snapshot.workers.filter(
     (item) => tone(item) === 'done',
   ).length;
@@ -268,6 +291,12 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
         </span>
         <span>{totalTokens.toLocaleString()} tokens</span>
         <span>${totalCost.toFixed(4)}</span>
+        {hasTokenCostReport && baselineCost > 0 && (
+          <span>
+            baseline ${baselineCost.toFixed(4)} · saved{' '}
+            {savingsPercent.toFixed(1)}%
+          </span>
+        )}
         <span>
           result cache {cacheHits}/{cacheMisses}
         </span>
