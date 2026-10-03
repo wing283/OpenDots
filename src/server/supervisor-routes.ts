@@ -95,8 +95,7 @@ async function validateThreadRunScope(
   supervisorRunId: string,
   signal: AbortSignal,
 ): Promise<
-  | { ok: true }
-  | { ok: false; status: 404 | 409 | 502; error: string }
+  { ok: true } | { ok: false; status: 404 | 409 | 502; error: string }
 > {
   try {
     workspace.requireThread(threadId, config.supervisorDotId);
@@ -114,9 +113,10 @@ async function validateThreadRunScope(
     { threadId },
     signal,
   );
-  const raw = (await response.json().catch(() => null)) as
-    | Record<string, unknown>
-    | null;
+  const raw = (await response.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
   if (!response.ok) {
     return {
       ok: false,
