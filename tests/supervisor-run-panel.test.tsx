@@ -73,76 +73,70 @@ it('renders Supervisor DAG state, costs, cache and dependencies', () => {
   expect(html).toContain('critical');
 });
 
-it(
-  'prefers measured TOKEN_COST_REPORT metrics over worker placeholders',
-  () => {
-    const state = {
-      bridge: 'supervisor-agui',
-      bridgeRunId: 'bridge-cost',
-      supervisorRunId: 'sv-cost',
-      supervisorPid: 321,
-      running: false,
-      activeCount: 0,
-      capacity: 3,
-      eventCounts: {
-        TOKEN_COST_REPORT: 1,
+it('prefers measured TOKEN_COST_REPORT metrics over worker placeholders', () => {
+  const state = {
+    bridge: 'supervisor-agui',
+    bridgeRunId: 'bridge-cost',
+    supervisorRunId: 'sv-cost',
+    supervisorPid: 321,
+    running: false,
+    activeCount: 0,
+    capacity: 3,
+    eventCounts: {
+      TOKEN_COST_REPORT: 1,
+    },
+    runMetrics: {
+      actualTokens: 2379,
+      actualCostUsd: 0.00580073,
+      baselineCostUsd: 0.0100098,
+      costSavingsPercent: 42.049,
+    },
+    workers: [
+      {
+        id: 'worker',
+        title: 'Worker',
+        status: 'stopped',
+        action: 'COMPLETE',
+        phase: 'complete',
+        provider: 'deepseek',
+        model: 'flash',
+        complexity: 'light',
+        mode: 'read_only',
+        dependsOn: [],
+        waitingFor: [],
+        downstreamWaitingCount: 0,
+        reason: '',
+        costUsd: 0,
+        tokens: 0,
       },
-      runMetrics: {
-        actualTokens: 2379,
-        actualCostUsd: 0.00580073,
-        baselineCostUsd: 0.0100098,
-        costSavingsPercent: 42.049,
-      },
-      workers: [
-        {
-          id: 'worker',
-          title: 'Worker',
-          status: 'stopped',
-          action: 'COMPLETE',
-          phase: 'complete',
-          provider: 'deepseek',
-          model: 'flash',
-          complexity: 'light',
-          mode: 'read_only',
-          dependsOn: [],
-          waitingFor: [],
-          downstreamWaitingCount: 0,
-          reason: '',
-          costUsd: 0,
-          tokens: 0,
-        },
-      ],
-    };
-    const html = renderToStaticMarkup(<SupervisorRunPanel state={state} />);
-    expect(html).toContain('2,379 tokens');
-    expect(html).toContain('$0.0058');
-    expect(html).toContain('baseline $0.0100');
-    expect(html).toContain('saved');
-    expect(html).toContain('42.0%');
-  },
-);
+    ],
+  };
+  const html = renderToStaticMarkup(<SupervisorRunPanel state={state} />);
+  expect(html).toContain('2,379 tokens');
+  expect(html).toContain('$0.0058');
+  expect(html).toContain('baseline $0.0100');
+  expect(html).toContain('saved');
+  expect(html).toContain('42.0%');
+});
 
-it(
-  'renders cancelled Supervisor runs distinctly from normal completion',
-  () => {
-    const state = {
-      bridge: 'supervisor-agui',
-      bridgeRunId: 'bridge-cancel',
-      supervisorRunId: 'sv-cancel',
-      supervisorPid: 0,
-      running: false,
-      cancelled: true,
-      cancelledAt: '2026-10-03T00:00:00Z',
-      activeCount: 0,
-      capacity: 3,
-      eventCounts: {},
-      workers: [],
-    };
-    const html = renderToStaticMarkup(<SupervisorRunPanel state={state} />);
-    expect(html).toContain('Cancelled');
-    expect(html).not.toContain('>Finished<');
-  },
-);
+it('renders cancelled Supervisor runs distinctly from normal completion', () => {
+  const state = {
+    bridge: 'supervisor-agui',
+    bridgeRunId: 'bridge-cancel',
+    supervisorRunId: 'sv-cancel',
+    supervisorPid: 0,
+    running: false,
+    cancelled: true,
+    cancelledAt: '2026-10-03T00:00:00Z',
+    activeCount: 0,
+    capacity: 3,
+    eventCounts: {},
+    workers: [],
+  };
+  const html = renderToStaticMarkup(<SupervisorRunPanel state={state} />);
+  expect(html).toContain('Cancelled');
+  expect(html).not.toContain('>Finished<');
+});
 
 it('groups workers into dependency layers', () => {
   const workers = [
