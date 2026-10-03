@@ -119,6 +119,25 @@ it('prefers measured TOKEN_COST_REPORT metrics over worker placeholders', () => 
   expect(html).toContain('42.0%');
 });
 
+it('renders cancelled Supervisor runs distinctly from normal completion', () => {
+  const state = {
+    bridge: 'supervisor-agui',
+    bridgeRunId: 'bridge-cancel',
+    supervisorRunId: 'sv-cancel',
+    supervisorPid: 0,
+    running: false,
+    cancelled: true,
+    cancelledAt: '2026-10-03T00:00:00Z',
+    activeCount: 0,
+    capacity: 3,
+    eventCounts: {},
+    workers: [],
+  };
+  const html = renderToStaticMarkup(<SupervisorRunPanel state={state} />);
+  expect(html).toContain('Cancelled');
+  expect(html).not.toContain('>Finished<');
+});
+
 it('groups workers into dependency layers', () => {
   const workers = [
     { id: 'a', dependsOn: [] },
