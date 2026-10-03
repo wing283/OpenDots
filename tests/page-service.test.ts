@@ -31,11 +31,7 @@ it('creates and saves a local Supervisor page conversation without Intelligence'
   const getSdk = vi.fn(() => {
     throw new Error('Local Supervisor page must not contact Intelligence');
   });
-  const service = new PageService(
-    ws,
-    getSdk,
-    (dotId) => dotId === dot.id,
-  );
+  const service = new PageService(ws, getSdk, (dotId) => dotId === dot.id);
 
   const thread = await service.conversation(dot.spaceId, page.id, dot.id);
   expect(thread.dotId).toBe(dot.id);
