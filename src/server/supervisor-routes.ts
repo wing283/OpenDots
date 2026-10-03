@@ -3,6 +3,12 @@ import { z } from 'zod';
 import type { PlatformConfig } from './platform-config.js';
 import type { WorkspaceStore } from './workspace.js';
 
+const threadRef = z
+  .object({
+    threadId: z.string().trim().min(1).max(512),
+  })
+  .strict();
+
 const runRef = z
   .object({
     supervisorRunId: z.string().trim().min(1).max(128),
@@ -169,6 +175,32 @@ export function supervisorRoutes(
         503,
       );
     }
+  });
+
+  app.post('/supervisor/thread-status', async (c) => {
+    if (!config.supervisorAguiUrl || !config.supervisorDotId)
+      return c.json(
+        { error: 'Supervisor integration is not configured.' },
+        404,
+      );
+
+    const parsed = threadRef.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ error: 'Invalid Supervisor thread request.' }, 400);
+
+    const response = await bridgePost(
+      config,
+      '/thread-status',
+      parsed.data,
+      c.req.raw.signal,
+    );
+    const body = (await response.json().catch(() => ({
+      error: 'Supervisor bridge returned an unreadable response.',
+    }))) as Record<string, unknown>;
+    return c.json(
+      body,
+      response.status as 200 | 400 | 404 | 409 | 500,
+    );
   });
 
   app.post('/supervisor/cancel', async (c) => {
