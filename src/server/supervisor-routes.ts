@@ -197,10 +197,7 @@ export function supervisorRoutes(
     const body = (await response.json().catch(() => ({
       error: 'Supervisor bridge returned an unreadable response.',
     }))) as Record<string, unknown>;
-    return c.json(
-      body,
-      response.status as 200 | 400 | 404 | 409 | 500,
-    );
+    return c.json(body, response.status as 200 | 400 | 404 | 409 | 500);
   });
 
   app.post('/supervisor/cancel', async (c) => {
