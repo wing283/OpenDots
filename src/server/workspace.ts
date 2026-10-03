@@ -22,7 +22,9 @@ export class WorkspaceStore {
       CREATE TABLE IF NOT EXISTS thread_bindings(id TEXT PRIMARY KEY, dotId TEXT NOT NULL, ownerId TEXT NOT NULL, title TEXT NOT NULL, createdAt INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS task_threads(taskId TEXT PRIMARY KEY, threadId TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS calls(id TEXT PRIMARY KEY, threadId TEXT NOT NULL, startedAt INTEGER NOT NULL, endedAt INTEGER, status TEXT NOT NULL, transcript TEXT NOT NULL, error TEXT);
-      CREATE TABLE IF NOT EXISTS captures(threadId TEXT PRIMARY KEY, value TEXT NOT NULL);`);
+      CREATE TABLE IF NOT EXISTS captures(threadId TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS supervisor_messages(threadId TEXT NOT NULL, id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, createdAt INTEGER NOT NULL, PRIMARY KEY(threadId, id));
+      CREATE INDEX IF NOT EXISTS supervisor_messages_thread_created ON supervisor_messages(threadId, createdAt);`);
     for (const [table, column, definition] of [
       ['dots', 'learningContainerId', 'TEXT'],
       ['dots', 'skillDeliveryEnabled', 'INTEGER NOT NULL DEFAULT 0'],
@@ -265,6 +267,75 @@ export class WorkspaceStore {
     if (!thread || (dotId && thread.dotId !== dotId))
       throw new Error('Conversation does not belong to this Dot and owner.');
     return thread;
+  }
+  supervisorMessages(threadId: string) {
+    this.requireThread(threadId);
+    return this.db
+      .prepare(
+        'SELECT id, role, content, createdAt FROM supervisor_messages WHERE threadId=? ORDER BY createdAt, rowid',
+      )
+      .all(threadId)
+      .map((row) => ({
+        id: String(row.id),
+        role: String(row.role) as 'user' | 'assistant',
+        content: String(row.content),
+        createdAt: Number(row.createdAt),
+      }));
+  }
+  appendSupervisorMessage(
+    threadId: string,
+    message: {
+      id: string;
+      role: 'user' | 'assistant';
+      content: string;
+    },
+  ) {
+    this.requireThread(threadId);
+    const id = String(message.id || '').trim();
+    const role = message.role;
+    const content = String(message.content ?? '');
+    if (!id || id.length > 512)
+      throw new Error('Supervisor message id is invalid.');
+    if (!['user', 'assistant'].includes(role))
+      throw new Error('Supervisor message role is invalid.');
+    if (!content.trim() || content.length > 200000)
+      throw new Error('Supervisor message content is invalid.');
+
+    const existing = this.db
+      .prepare(
+        'SELECT role, content, createdAt FROM supervisor_messages WHERE threadId=? AND id=?',
+      )
+      .get(threadId, id);
+    if (existing) {
+      if (
+        String(existing.role) !== role ||
+        String(existing.content) !== content
+      )
+        throw new Error(
+          'Supervisor message id is already bound to different content.',
+        );
+      return {
+        id,
+        role,
+        content,
+        createdAt: Number(existing.createdAt),
+      };
+    }
+
+    const createdAt = Date.now();
+    this.db
+      .prepare(
+        'INSERT INTO supervisor_messages(threadId, id, role, content, createdAt) VALUES (?, ?, ?, ?, ?)',
+      )
+      .run(threadId, id, role, content, createdAt);
+    return { id, role, content, createdAt };
+  }
+  supervisorHistory(threadId: string): string {
+    return this.supervisorMessages(threadId)
+      .slice(-12)
+      .map((message) => `${message.role}: ${message.content}`)
+      .join('\n')
+      .slice(-12000);
   }
   bindTask(taskId: string, threadId: string) {
     this.requireThread(threadId);
