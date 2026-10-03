@@ -214,6 +214,12 @@ try {
       `Plan-cache soak verdict failed: ${JSON.stringify(planCacheSoak.planCacheSmallVerdict)}`,
     );
 
+  const dagCacheSoak = await runSoakMode('dag-cache', dotId, appPort);
+  if (dagCacheSoak.dagCacheVerdict?.pass !== true)
+    throw new Error(
+      `DAG cache soak verdict failed: ${JSON.stringify(dagCacheSoak.dagCacheVerdict)}`,
+    );
+
   const writerSoak = await runSoakMode(
     'writer-approval',
     dotId,
@@ -246,6 +252,7 @@ try {
         customEvents: custom.map((event) => event.name),
         assistantMessages: messages.length,
         planCacheSmallVerdict: planCacheSoak.planCacheSmallVerdict,
+        dagCacheVerdict: dagCacheSoak.dagCacheVerdict,
         writerApprovalVerdict: writerSoak.writerApprovalVerdict,
         cancelVerdict: cancelSoak.cancelVerdict,
       },
