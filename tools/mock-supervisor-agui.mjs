@@ -1,21 +1,84 @@
 import http from 'node:http';
 
 const port = Number(process.env.MOCK_SUPERVISOR_PORT || 28793);
+let planCacheSoakRuns = 0;
+
+async function readJson(req) {
+  let raw = '';
+  for await (const chunk of req) raw += chunk;
+  return raw ? JSON.parse(raw) : {};
+}
+
+function sendJson(res, status, value) {
+  const body = JSON.stringify(value);
+  res.writeHead(status, {
+    'content-type': 'application/json',
+    'content-length': Buffer.byteLength(body),
+  });
+  res.end(body);
+}
+
+function worker(id, dependsOn = []) {
+  return {
+    id,
+    title: id,
+    status: 'stopped',
+    action: 'COMPLETE',
+    phase: 'complete',
+    provider: 'mock',
+    model: 'mock',
+    complexity: 'light',
+    mode: 'read_only',
+    dependsOn,
+    waitingFor: [],
+    downstreamWaitingCount: 0,
+    reason: '',
+    costUsd: 0,
+    tokens: 0,
+  };
+}
+
+function custom(name, workerId = '', payload = {}) {
+  return {
+    type: 'CUSTOM',
+    name,
+    value: { payload, workerId },
+  };
+}
 
 const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
-    const body = JSON.stringify({
+    sendJson(res, 200, {
       ok: true,
       bridgeReady: true,
       runReady: true,
       version: 'ci-mock',
       execution: { activeCount: 0, capacity: 3, missingRequiredEnv: [] },
     });
-    res.writeHead(200, {
-      'content-type': 'application/json',
-      'content-length': Buffer.byteLength(body),
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/evidence') {
+    const body = await readJson(req);
+    const runId = String(body.supervisorRunId || 'ci-supervisor-run');
+    sendJson(res, 200, {
+      ok: true,
+      evidence: {
+        runId,
+        totalCount: 1,
+        items: [
+          {
+            id: 'EV-CI-0001',
+            category: 'ci_mock',
+            source: 'mock-supervisor-agui',
+            trust: 'mechanical',
+            capturedAt: '2026-10-03T00:00:00Z',
+            sha256: 'ci-mock-sha256',
+            payloadPreview: 'Deterministic CI evidence projection.',
+          },
+        ],
+      },
     });
-    res.end(body);
     return;
   }
 
@@ -24,12 +87,59 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  let raw = '';
-  for await (const chunk of req) raw += chunk;
-  const input = raw ? JSON.parse(raw) : {};
+  const input = await readJson(req);
   const threadId = String(input.threadId || 'ci-thread');
   const runId = String(input.runId || 'ci-run');
   const messageId = `${runId}-assistant`;
+  const messages = Array.isArray(input.messages) ? input.messages : [];
+  const latestUser = [...messages]
+    .reverse()
+    .find((message) => message?.role === 'user');
+  const prompt = String(latestUser?.content || '');
+  const isPlanCacheSoak = prompt.includes('Supervisor cache regression.');
+
+  let supervisorRunId = 'ci-supervisor-run';
+  let workers = [worker('planner'), worker('worker', ['planner'])];
+  let customEvents = [custom('sv.cache.miss', 'worker', { key: 'ci-key' })];
+  let eventCounts = { CACHE_MISS: 1, WORKFLOW_PHASE: 2 };
+
+  if (isPlanCacheSoak) {
+    planCacheSoakRuns += 1;
+    supervisorRunId = `ci-plan-cache-run-${planCacheSoakRuns}`;
+    workers = [worker('calc_small'), worker('format_small')];
+    if (planCacheSoakRuns === 1) {
+      customEvents = [
+        custom('sv.plan.cache.miss', '', { key: 'ci-plan-key', reason: 'not_found' }),
+        custom('sv.plan.cache.store', '', { key: 'ci-plan-key', workers: 2 }),
+        custom('sv.cache.miss', 'calc_small', { key: 'ci-calc-key' }),
+        custom('sv.cache.store', 'calc_small', { key: 'ci-calc-key' }),
+        custom('sv.cache.miss', 'format_small', { key: 'ci-format-key' }),
+        custom('sv.cache.store', 'format_small', { key: 'ci-format-key' }),
+      ];
+      eventCounts = {
+        PLAN_CACHE_MISS: 1,
+        PLAN_CACHE_STORE: 1,
+        CACHE_MISS: 2,
+        CACHE_STORE: 2,
+      };
+    } else {
+      customEvents = [
+        custom('sv.plan.cache.hit', '', { key: 'ci-plan-key', workers: 2 }),
+        custom('sv.cache.hit', 'calc_small', {
+          key: 'ci-calc-key',
+          source_run_id: 'ci-plan-cache-run-1',
+        }),
+        custom('sv.cache.hit', 'format_small', {
+          key: 'ci-format-key',
+          source_run_id: 'ci-plan-cache-run-1',
+        }),
+      ];
+      eventCounts = {
+        PLAN_CACHE_HIT: 1,
+        CACHE_HIT: 2,
+      };
+    }
+  }
 
   const events = [
     { type: 'RUN_STARTED', threadId, runId },
@@ -38,55 +148,22 @@ const server = http.createServer(async (req, res) => {
       snapshot: {
         bridge: 'supervisor-agui',
         bridgeRunId: runId,
-        supervisorRunId: 'ci-supervisor-run',
+        supervisorRunId,
         supervisorPid: 4242,
         running: true,
         activeCount: 1,
         capacity: 3,
-        eventCounts: { CACHE_MISS: 1 },
-        workers: [
-          {
-            id: 'planner',
-            title: 'Planner',
-            status: 'running',
-            action: 'PLAN',
-            phase: 'planning',
-            provider: 'mock',
-            model: 'mock',
-            complexity: 'light',
-            mode: 'read_only',
-            dependsOn: [],
-            waitingFor: [],
-            downstreamWaitingCount: 1,
-            reason: '',
-            costUsd: 0,
-            tokens: 0,
-          },
-          {
-            id: 'worker',
-            title: 'Worker',
-            status: 'waiting',
-            action: 'WAIT',
-            phase: 'dag',
-            provider: 'mock',
-            model: 'mock',
-            complexity: 'light',
-            mode: 'read_only',
-            dependsOn: ['planner'],
-            waitingFor: ['planner'],
-            downstreamWaitingCount: 0,
-            reason: '',
-            costUsd: 0,
-            tokens: 0,
-          },
-        ],
+        eventCounts,
+        workers: workers.map((item) => ({
+          ...item,
+          status: item.id === 'planner' ? 'running' : 'waiting',
+          action: item.id === 'planner' ? 'PLAN' : 'WAIT',
+          phase: item.id === 'planner' ? 'planning' : 'dag',
+          waitingFor: item.dependsOn,
+        })),
       },
     },
-    {
-      type: 'CUSTOM',
-      name: 'sv.cache.miss',
-      value: { payload: { key: 'ci-key' }, workerId: 'worker' },
-    },
+    ...customEvents,
     { type: 'TEXT_MESSAGE_START', messageId, role: 'assistant' },
     { type: 'TEXT_MESSAGE_CONTENT', messageId, delta: 'ci-mock-ok' },
     { type: 'TEXT_MESSAGE_END', messageId },
@@ -95,48 +172,13 @@ const server = http.createServer(async (req, res) => {
       snapshot: {
         bridge: 'supervisor-agui',
         bridgeRunId: runId,
-        supervisorRunId: 'ci-supervisor-run',
+        supervisorRunId,
         supervisorPid: 4242,
         running: false,
         activeCount: 0,
         capacity: 3,
-        eventCounts: { CACHE_MISS: 1, WORKFLOW_PHASE: 2 },
-        workers: [
-          {
-            id: 'planner',
-            title: 'Planner',
-            status: 'stopped',
-            action: 'COMPLETE',
-            phase: 'complete',
-            provider: 'mock',
-            model: 'mock',
-            complexity: 'light',
-            mode: 'read_only',
-            dependsOn: [],
-            waitingFor: [],
-            downstreamWaitingCount: 1,
-            reason: '',
-            costUsd: 0,
-            tokens: 0,
-          },
-          {
-            id: 'worker',
-            title: 'Worker',
-            status: 'stopped',
-            action: 'COMPLETE',
-            phase: 'complete',
-            provider: 'mock',
-            model: 'mock',
-            complexity: 'light',
-            mode: 'read_only',
-            dependsOn: ['planner'],
-            waitingFor: [],
-            downstreamWaitingCount: 0,
-            reason: '',
-            costUsd: 0,
-            tokens: 0,
-          },
-        ],
+        eventCounts,
+        workers,
       },
     },
     { type: 'RUN_FINISHED', threadId, runId },
