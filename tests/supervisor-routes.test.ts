@@ -57,6 +57,39 @@ it('proxies approval to the configured bridge', async () => {
   }
 });
 
+it('proxies writer decline to the configured bridge', async () => {
+  const { workspace, config } = setup();
+  try {
+    const fetchMock = vi.fn(async (_url: URL, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toEqual({
+        supervisorRunId: 'sv-decline',
+        decision: 'decline',
+      });
+      return Response.json({
+        ok: true,
+        approval: { status: 'declined', decision: 'decline' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const app = supervisorRoutes(config, workspace);
+    const response = await app.request('/supervisor/approval', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        supervisorRunId: 'sv-decline',
+        decision: 'decline',
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      approval: { status: 'declined', decision: 'decline' },
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  } finally {
+    workspace.close();
+  }
+});
+
 it('rejects malformed approval before contacting the bridge', async () => {
   const { workspace, config } = setup();
   try {
