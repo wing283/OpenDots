@@ -194,6 +194,7 @@ export function Chat({
     }
     try {
       await api('/supervisor/cancel', 'POST', {
+        threadId: thread.id,
         supervisorRunId: snapshot.supervisorRunId,
         ...(snapshot.supervisorPid > 0
           ? { supervisorPid: snapshot.supervisorPid }
@@ -395,7 +396,7 @@ export function Chat({
         </div>
       </header>
       <SupervisorHealthStatus enabled={supervisor} />
-      <SupervisorRunPanel state={agent.state} />
+      <SupervisorRunPanel state={agent.state} threadId={thread.id} />
       {pageContext && (
         <div className="page-chat-context">
           Working on{' '}
