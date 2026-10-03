@@ -22,7 +22,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - name: Run Supervisor integration tests
-        run: npx vitest run tests/supervisor-agent.test.ts tests/supervisor-health-status.test.tsx tests/supervisor-local-runtime.test.ts tests/supervisor-routes.test.ts tests/supervisor-run-panel.test.tsx tests/supervisor-recovery.test.ts
+        run: npx vitest run tests/supervisor-agent.test.ts tests/supervisor-health-status.test.tsx tests/supervisor-local-runtime.test.ts tests/supervisor-routes.test.ts tests/supervisor-run-panel.test.tsx tests/supervisor-recovery.test.ts tests/supervisor-platform-history.test.ts
       - run: node --check tools/benchmark-supervisor-transport.mjs
       - run: node --check tools/benchmark-supervisor-live.mjs
       - run: node --check tools/soak-supervisor-integration.mjs
