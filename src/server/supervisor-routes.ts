@@ -11,12 +11,14 @@ const threadRef = z
 
 const runRef = z
   .object({
+    threadId: z.string().trim().min(1).max(512),
     supervisorRunId: z.string().trim().min(1).max(128),
   })
   .strict();
 
 const cancelRef = z
   .object({
+    threadId: z.string().trim().min(1).max(512),
     supervisorRunId: z.string().trim().min(1).max(128),
     supervisorPid: z.number().int().positive().optional(),
   })
@@ -24,6 +26,7 @@ const cancelRef = z
 
 const approval = z
   .object({
+    threadId: z.string().trim().min(1).max(512),
     supervisorRunId: z.string().trim().min(1).max(128),
     decision: z.enum(['approve', 'decline']),
   })
@@ -83,6 +86,60 @@ async function bridgeGet(
     signal,
     headers: bridgeHeaders(config),
   });
+}
+
+async function validateThreadRunScope(
+  config: PlatformConfig,
+  workspace: WorkspaceStore,
+  threadId: string,
+  supervisorRunId: string,
+  signal: AbortSignal,
+): Promise<
+  | { ok: true }
+  | { ok: false; status: 404 | 409 | 502; error: string }
+> {
+  try {
+    workspace.requireThread(threadId, config.supervisorDotId);
+  } catch {
+    return {
+      ok: false,
+      status: 404,
+      error: 'Supervisor thread does not belong to this Dot.',
+    };
+  }
+
+  const response = await bridgePost(
+    config,
+    '/thread-status',
+    { threadId },
+    signal,
+  );
+  const raw = (await response.json().catch(() => null)) as
+    | Record<string, unknown>
+    | null;
+  if (!response.ok) {
+    return {
+      ok: false,
+      status: response.status === 404 ? 404 : 502,
+      error:
+        typeof raw?.error === 'string'
+          ? raw.error
+          : 'Supervisor thread status could not be verified.',
+    };
+  }
+
+  const snapshot =
+    raw?.snapshot && typeof raw.snapshot === 'object'
+      ? (raw.snapshot as Record<string, unknown>)
+      : {};
+  if (String(snapshot.supervisorRunId || '') !== supervisorRunId) {
+    return {
+      ok: false,
+      status: 409,
+      error: 'Supervisor run does not belong to this conversation.',
+    };
+  }
+  return { ok: true };
 }
 
 function evidenceMarkdown(
@@ -220,10 +277,24 @@ export function supervisorRoutes(
     if (!parsed.success)
       return c.json({ error: 'Invalid Supervisor cancel request.' }, 400);
 
+    const scope = await validateThreadRunScope(
+      config,
+      workspace,
+      parsed.data.threadId,
+      parsed.data.supervisorRunId,
+      c.req.raw.signal,
+    );
+    if (!scope.ok) return c.json({ error: scope.error }, scope.status);
+
     const response = await bridgePost(
       config,
       '/cancel',
-      parsed.data,
+      {
+        supervisorRunId: parsed.data.supervisorRunId,
+        ...(parsed.data.supervisorPid
+          ? { supervisorPid: parsed.data.supervisorPid }
+          : {}),
+      },
       c.req.raw.signal,
     );
     const body = (await response.json().catch(() => ({
@@ -243,10 +314,22 @@ export function supervisorRoutes(
     if (!parsed.success)
       return c.json({ error: 'Invalid Supervisor approval request.' }, 400);
 
+    const scope = await validateThreadRunScope(
+      config,
+      workspace,
+      parsed.data.threadId,
+      parsed.data.supervisorRunId,
+      c.req.raw.signal,
+    );
+    if (!scope.ok) return c.json({ error: scope.error }, scope.status);
+
     const response = await bridgePost(
       config,
       '/approval',
-      parsed.data,
+      {
+        supervisorRunId: parsed.data.supervisorRunId,
+        decision: parsed.data.decision,
+      },
       c.req.raw.signal,
     );
     const body = (await response.json().catch(() => ({
@@ -265,10 +348,19 @@ export function supervisorRoutes(
     if (!parsed.success)
       return c.json({ error: 'Invalid Supervisor evidence request.' }, 400);
 
+    const scope = await validateThreadRunScope(
+      config,
+      workspace,
+      parsed.data.threadId,
+      parsed.data.supervisorRunId,
+      c.req.raw.signal,
+    );
+    if (!scope.ok) return c.json({ error: scope.error }, scope.status);
+
     const response = await bridgePost(
       config,
       '/evidence',
-      parsed.data,
+      { supervisorRunId: parsed.data.supervisorRunId },
       c.req.raw.signal,
     );
     const raw = await response.json().catch(() => null);
