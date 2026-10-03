@@ -248,16 +248,15 @@ const server = http.createServer(async (req, res) => {
         status: 'pending',
       }),
     );
-    writeSse(
-      res,
-      snapshot({
-        bridgeRunId: runId,
-        supervisorRunId,
-        running: true,
-        approval: { status: 'pending' },
-        workers: [{ ...writer, status: 'waiting', action: 'WAIT' }],
-      }),
-    );
+    const writerPending = snapshot({
+      bridgeRunId: runId,
+      supervisorRunId,
+      running: true,
+      approval: { status: 'pending' },
+      workers: [{ ...writer, status: 'waiting', action: 'WAIT' }],
+    });
+    threadSnapshots.set(threadId, writerPending.snapshot);
+    writeSse(res, writerPending);
 
     const resolved = await waitUntil(
       () => approvals.get(supervisorRunId)?.status !== 'pending',
@@ -347,20 +346,19 @@ const server = http.createServer(async (req, res) => {
     ];
     cancellations.set(supervisorRunId, { cancelled: false });
     writeSse(res, { type: 'RUN_STARTED', threadId, runId });
-    writeSse(
-      res,
-      snapshot({
-        bridgeRunId: runId,
-        supervisorRunId,
-        running: true,
-        workers: cancelWorkers.map((item) => ({
-          ...item,
-          status: 'running',
-          action: 'WORK',
-          phase: 'worker',
-        })),
-      }),
-    );
+    const cancelRunning = snapshot({
+      bridgeRunId: runId,
+      supervisorRunId,
+      running: true,
+      workers: cancelWorkers.map((item) => ({
+        ...item,
+        status: 'running',
+        action: 'WORK',
+        phase: 'worker',
+      })),
+    });
+    threadSnapshots.set(threadId, cancelRunning.snapshot);
+    writeSse(res, cancelRunning);
 
     const cancelled = await waitUntil(
       () => cancellations.get(supervisorRunId)?.cancelled === true,
@@ -524,7 +522,7 @@ const server = http.createServer(async (req, res) => {
     eventCounts,
     workers,
   });
-  threadSnapshots.set(threadId, finalSnapshot.snapshot);
+  threadSnapshots.set(threadId, runningSnapshot.snapshot);
 
   const events = [
     { type: 'RUN_STARTED', threadId, runId },
@@ -537,7 +535,11 @@ const server = http.createServer(async (req, res) => {
     { type: 'RUN_FINISHED', threadId, runId },
   ];
 
-  for (const event of events) writeSse(res, event);
+  for (const event of events) {
+    if (event === finalSnapshot)
+      threadSnapshots.set(threadId, finalSnapshot.snapshot);
+    writeSse(res, event);
+  }
   res.end();
 });
 
