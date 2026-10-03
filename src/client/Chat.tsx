@@ -203,6 +203,49 @@ export function Chat({
   };
 
   useEffect(() => {
+    if (!supervisor || !loaded) return;
+
+    let active = true;
+    let timer: number | undefined;
+
+    const refreshSupervisorThread = async () => {
+      try {
+        const result = await api<{
+          snapshot?: unknown;
+        }>(
+          '/supervisor/thread-status',
+          'POST',
+          { threadId: thread.id },
+          AbortSignal.timeout(3000),
+        );
+        if (!active) return;
+
+        const restored = supervisorSnapshot(result.snapshot);
+        if (!restored) return;
+
+        agent.setState(restored);
+        setRunning(restored.running);
+
+        if (restored.running) {
+          timer = window.setTimeout(
+            () => void refreshSupervisorThread(),
+            1000,
+          );
+        }
+      } catch {
+        // No prior binding is the normal case for a fresh Supervisor thread.
+        // Bridge reachability is already surfaced by SupervisorHealthStatus.
+      }
+    };
+
+    void refreshSupervisorThread();
+    return () => {
+      active = false;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [agent, loaded, supervisor, thread.id]);
+
+  useEffect(() => {
     if (loaded && contextReady && !paused && initialPrompt && !sent.current) {
       sent.current = true;
       onConsumed();
