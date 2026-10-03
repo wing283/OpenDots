@@ -39,10 +39,17 @@ export class Platform {
       config,
       () => store.settings().paused,
     );
-    this.pages = new PageService(workspace, () => {
-      this.requireReady();
-      return this.intelligence!;
-    });
+    this.pages = new PageService(
+      workspace,
+      () => {
+        this.requireReady();
+        return this.intelligence!;
+      },
+      (dotId) =>
+        !this.intelligence &&
+        dotId === this.config.supervisorDotId &&
+        !!this.config.supervisorAguiUrl,
+    );
     if (config.intelligenceKey)
       this.intelligence = new CopilotKitIntelligence({
         apiKey: config.intelligenceKey,
