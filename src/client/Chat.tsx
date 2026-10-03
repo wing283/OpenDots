@@ -99,6 +99,7 @@ export function Chat({
   const voice = useVoice(thread.id, onSaved, agent.messages.at(-1)?.id);
   const sent = useRef(false);
   const cancelled = useRef(false);
+  const declined = useRef(false);
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const subscription = copilotkit.subscribe({
@@ -108,6 +109,11 @@ export function Chat({
       onRunErrorEvent: ({ event }) => {
         if (event.code === 'SUPERVISOR_CANCELLED') {
           cancelled.current = true;
+          setError('');
+          return;
+        }
+        if (event.code === 'SUPERVISOR_APPROVAL_DECLINED') {
+          declined.current = true;
           setError('');
           return;
         }
@@ -141,6 +147,7 @@ export function Chat({
     if (!text.trim() || running || !loaded || !contextReady || paused) return;
     setError('');
     cancelled.current = false;
+    declined.current = false;
     setRunning(true);
     agent.addMessage({
       id: crypto.randomUUID(),
@@ -153,7 +160,7 @@ export function Chat({
     try {
       const result = await copilotkit.runAgent({ agent });
       if (!result.newMessages.some((message) => message.role === 'assistant')) {
-        if (cancelled.current) {
+        if (cancelled.current || declined.current) {
           onSaved();
           return;
         }
