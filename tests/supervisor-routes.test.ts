@@ -171,8 +171,9 @@ it('projects evidence into one stable Space page per Supervisor run', async () =
 });
 
 it('proxies durable Supervisor thread status', async () => {
-  const { workspace, config } = setup();
+  const { workspace, config, dot } = setup();
   try {
+    workspace.bindThread('thread-restore', dot.id, 'Restore');
     const fetchMock = vi.fn(async (url: URL, init?: RequestInit) => {
       expect(url.toString()).toBe('http://127.0.0.1:8791/thread-status');
       expect(JSON.parse(String(init?.body))).toEqual({
@@ -208,6 +209,35 @@ it('proxies durable Supervisor thread status', async () => {
       },
     });
     expect(fetchMock).toHaveBeenCalledOnce();
+  } finally {
+    workspace.close();
+  }
+});
+
+it('rejects thread status for a conversation owned by another Dot', async () => {
+  const { workspace, config, dot } = setup();
+  try {
+    const other = workspace.createDot(
+      dot.spaceId,
+      'Other',
+      'Not the Supervisor Dot.',
+      true,
+      true,
+    );
+    workspace.bindThread('thread-other-dot', other.id, 'Other thread');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const app = supervisorRoutes(config, workspace);
+    const response = await app.request('/supervisor/thread-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ threadId: 'thread-other-dot' }),
+    });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({
+      error: 'Supervisor thread does not belong to this Dot.',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   } finally {
     workspace.close();
   }
