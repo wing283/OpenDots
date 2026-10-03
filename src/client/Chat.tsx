@@ -96,9 +96,8 @@ export function Chat({
   const [error, setError] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [running, setRunning] = useState(false);
-  const [supervisorRecoveryReady, setSupervisorRecoveryReady] = useState(
-    !supervisor,
-  );
+  const [supervisorRecoveryReady, setSupervisorRecoveryReady] =
+    useState(!supervisor);
   const voice = useVoice(thread.id, onSaved, agent.messages.at(-1)?.id);
   const sent = useRef(false);
   const cancelled = useRef(false);
