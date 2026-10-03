@@ -5,6 +5,7 @@ import { join } from 'node:path';
 const port = Number(process.env.MOCK_SUPERVISOR_PORT || 28793);
 const workspace = process.env.MOCK_SUPERVISOR_WORKSPACE || '';
 let planCacheSoakRuns = 0;
+let dagCacheSoakRuns = 0;
 const approvals = new Map();
 const cancellations = new Map();
 
@@ -190,6 +191,9 @@ const server = http.createServer(async (req, res) => {
     .find((message) => message?.role === 'user');
   const prompt = String(latestUser?.content || '');
   const isPlanCacheSoak = prompt.includes('Supervisor cache regression.');
+  const isDagCacheSoak = prompt.includes(
+    'Supervisor/OpenDots integration regression.',
+  );
   const isWriterSoak = prompt.includes('OPENDOTS_SOAK_WRITER_MARKER.txt');
   const isCancelSoak = prompt.includes(
     'Create four independent heavy read_only engineering-analysis workers.',
@@ -340,7 +344,61 @@ const server = http.createServer(async (req, res) => {
   let customEvents = [custom('sv.cache.miss', 'worker', { key: 'ci-key' })];
   let eventCounts = { CACHE_MISS: 1, WORKFLOW_PHASE: 2 };
 
-  if (isPlanCacheSoak) {
+  if (isDagCacheSoak) {
+    dagCacheSoakRuns += 1;
+    supervisorRunId = `ci-dag-cache-run-${dagCacheSoakRuns}`;
+    workers = [
+      worker('light_calc'),
+      worker('light_sort'),
+      worker('heavy_logic', { complexity: 'heavy' }),
+      worker('heavy_design_review', { complexity: 'heavy' }),
+    ];
+    if (dagCacheSoakRuns === 1) {
+      customEvents = [
+        custom('sv.plan.cache.miss', '', {
+          key: 'ci-dag-plan-key',
+          reason: 'not_found',
+        }),
+        custom('sv.plan.cache.store', '', {
+          key: 'ci-dag-plan-key',
+          workers: 4,
+        }),
+        ...workers.flatMap((item) => [
+          custom('sv.cache.miss', item.id, {
+            key: `ci-dag-${item.id}-key`,
+          }),
+          custom('sv.cache.store', item.id, {
+            key: `ci-dag-${item.id}-key`,
+          }),
+        ]),
+      ];
+      eventCounts = {
+        PLAN_CACHE_MISS: 1,
+        PLAN_CACHE_STORE: 1,
+        CACHE_MISS: 4,
+        CACHE_STORE: 4,
+        EVIDENCE_RECORDED: 4,
+      };
+    } else {
+      customEvents = [
+        custom('sv.plan.cache.hit', '', {
+          key: 'ci-dag-plan-key',
+          workers: 4,
+        }),
+        ...workers.map((item) =>
+          custom('sv.cache.hit', item.id, {
+            key: `ci-dag-${item.id}-key`,
+            source_run_id: 'ci-dag-cache-run-1',
+          }),
+        ),
+      ];
+      eventCounts = {
+        PLAN_CACHE_HIT: 1,
+        CACHE_HIT: 4,
+        EVIDENCE_RECORDED: 4,
+      };
+    }
+  } else if (isPlanCacheSoak) {
     planCacheSoakRuns += 1;
     supervisorRunId = `ci-plan-cache-run-${planCacheSoakRuns}`;
     workers = [worker('calc_small'), worker('format_small')];
