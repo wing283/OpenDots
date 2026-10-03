@@ -26,6 +26,8 @@ export type SupervisorSnapshot = {
   running: boolean;
   cancelled: boolean;
   cancelledAt: string;
+  recoveryState: string;
+  bindingStatus: string;
   activeCount: number;
   capacity: number;
   workers: Worker[];
@@ -102,6 +104,8 @@ export function supervisorSnapshot(value: unknown): SupervisorSnapshot | null {
     running: Boolean(raw.running),
     cancelled: raw.cancelled === true,
     cancelledAt: text(raw.cancelledAt),
+    recoveryState: text(raw.recoveryState),
+    bindingStatus: text(raw.bindingStatus),
     activeCount: number(raw.activeCount),
     capacity: number(raw.capacity),
     workers,
@@ -273,16 +277,20 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
         <div>
           <strong>Supervisor DAG</strong>
           <span>
-            {snapshot.running
-              ? 'Running'
-              : snapshot.cancelled
-                ? 'Cancelled'
-                : 'Finished'}
+            {snapshot.recoveryState === 'uncertain'
+              ? 'Reconnecting…'
+              : snapshot.running
+                ? 'Running'
+                : snapshot.cancelled
+                  ? 'Cancelled'
+                  : 'Finished'}
           </span>
         </div>
         <div className="supervisor-run-heading-actions">
           <code>{snapshot.supervisorRunId || 'starting…'}</code>
-          {snapshot.running && snapshot.supervisorRunId && (
+          {snapshot.running &&
+            snapshot.recoveryState !== 'uncertain' &&
+            snapshot.supervisorRunId && (
             <button
               type="button"
               disabled={cancelBusy}
