@@ -193,14 +193,19 @@ export function Chat({
           'The current turn returned no response. Check the runtime connection and retry.',
         );
       }
-      if (supervisor)
-        for (const message of assistantMessages)
+      if (supervisor) {
+        const finalRunId = supervisorSnapshot(agent.state)?.supervisorRunId;
+        for (const [index, message] of assistantMessages.entries())
           await api('/supervisor/messages', 'POST', {
             threadId: thread.id,
-            id: message.id,
+            id:
+              finalRunId && index === assistantMessages.length - 1
+                ? `supervisor-recovery:${finalRunId}:final`
+                : message.id,
             role: 'assistant',
             content: message.content,
           });
+      }
       onSaved();
     } catch (e) {
       if (!cancelled.current)
