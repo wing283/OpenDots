@@ -30,10 +30,7 @@ import type { CallReceipt, Conversation, Dot } from '../shared/types';
 import { Mascot } from './Mascot';
 import { useVoice } from './useVoice';
 import { CallView } from './CallView';
-import {
-  SupervisorRunPanel,
-  supervisorSnapshot,
-} from './SupervisorRunPanel';
+import { SupervisorRunPanel, supervisorSnapshot } from './SupervisorRunPanel';
 import { SupervisorHealthStatus } from './SupervisorHealthStatus';
 export function Chat({
   thread,
