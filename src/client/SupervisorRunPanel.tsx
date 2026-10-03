@@ -279,11 +279,14 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
           <span>
             {snapshot.recoveryState === 'uncertain'
               ? 'Reconnecting…'
-              : snapshot.running
-                ? 'Running'
-                : snapshot.cancelled
-                  ? 'Cancelled'
-                  : 'Finished'}
+              : snapshot.bindingStatus === 'declined' ||
+                  snapshot.recoveryState === 'declined'
+                ? 'Declined'
+                : snapshot.running
+                  ? 'Running'
+                  : snapshot.cancelled
+                    ? 'Cancelled'
+                    : 'Finished'}
           </span>
         </div>
         <div className="supervisor-run-heading-actions">
