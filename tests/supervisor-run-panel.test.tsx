@@ -138,6 +138,26 @@ it('renders cancelled Supervisor runs distinctly from normal completion', () => 
   expect(html).not.toContain('>Finished<');
 });
 
+it('shows uncertain recovery without exposing Stop run', () => {
+  const state = {
+    bridge: 'supervisor-agui',
+    bridgeRunId: 'bridge-recover',
+    supervisorRunId: 'sv-recover',
+    supervisorPid: 4321,
+    running: true,
+    recoveryState: 'uncertain',
+    bindingStatus: 'active',
+    activeCount: 1,
+    capacity: 3,
+    eventCounts: {},
+    workers: [],
+  };
+  const html = renderToStaticMarkup(<SupervisorRunPanel state={state} />);
+  expect(html).toContain('Reconnecting…');
+  expect(html).not.toContain('Stop run');
+  expect(html).not.toContain('>Finished<');
+});
+
 it('groups workers into dependency layers', () => {
   const workers = [
     { id: 'a', dependsOn: [] },
