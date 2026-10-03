@@ -10,6 +10,7 @@ const approvals = new Map();
 const cancellations = new Map();
 const recoveries = new Map();
 const threadSnapshots = new Map();
+const threadFinalMessages = new Map();
 
 async function readJson(req) {
   let raw = '';
@@ -135,6 +136,7 @@ const server = http.createServer(async (req, res) => {
         String(restored.recoveryState || '') ||
         (restoredStatus === 'active' ? 'matched' : restoredStatus),
       snapshot: restored,
+      finalMessage: threadFinalMessages.get(threadId) || {},
     });
     return;
   }
@@ -309,6 +311,11 @@ const server = http.createServer(async (req, res) => {
     done.snapshot.bindingStatus = 'finished';
     done.snapshot.recoveryState = 'finished';
     threadSnapshots.set(threadId, done.snapshot);
+    threadFinalMessages.set(threadId, {
+      id: `supervisor-recovery:${supervisorRunId}:final`,
+      role: 'assistant',
+      content: 'ci-recovery-ok',
+    });
     writeSse(res, done);
     writeSse(res, { type: 'RUN_FINISHED', threadId, runId });
     recoveries.delete(threadId);
@@ -409,6 +416,11 @@ const server = http.createServer(async (req, res) => {
       workers: [writer],
     });
     threadSnapshots.set(threadId, writerFinal.snapshot);
+    threadFinalMessages.set(threadId, {
+      id: `supervisor-recovery:${supervisorRunId}:final`,
+      role: 'assistant',
+      content: 'ci-writer-approved',
+    });
     writeSse(res, writerFinal);
     writeSse(res, { type: 'RUN_FINISHED', threadId, runId });
     approvals.delete(supervisorRunId);
@@ -603,6 +615,12 @@ const server = http.createServer(async (req, res) => {
     workers,
   });
   threadSnapshots.set(threadId, runningSnapshot.snapshot);
+
+  threadFinalMessages.set(threadId, {
+    id: `supervisor-recovery:${supervisorRunId}:final`,
+    role: 'assistant',
+    content: 'ci-mock-ok',
+  });
 
   const events = [
     { type: 'RUN_STARTED', threadId, runId },
