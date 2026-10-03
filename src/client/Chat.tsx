@@ -320,7 +320,11 @@ export function Chat({
         if (!restored.running) {
           const recovered = recoveredSupervisorMessage(
             result.finalMessage,
-            agent.messages.map((message) => message.id),
+            agent.messages.map((message) => ({
+              id: message.id,
+              role: message.role,
+              content: message.content,
+            })),
           );
           if (recovered) {
             await api('/supervisor/messages', 'POST', {
