@@ -85,7 +85,11 @@ function evaluateDagCache(first, second, keyComparison) {
     expected.every((id) => (firstById[id]?.dependsOn || []).length === 0) &&
     expected.every((id) => (secondById[id]?.dependsOn || []).length === 0);
   const keysStable = expected.every((id) => keyComparison[id]?.same === true);
-  const fullCacheHit = second.cacheHits === expected.length;
+  const firstPlanCachePrimed =
+    first.planCacheMisses >= 1 && first.planCacheStores >= 1;
+  const secondPlanCacheHit = second.planCacheHits >= 1;
+  const fullCacheHit =
+    second.cacheHits === expected.length && second.cacheMisses === 0;
   const evidenceProjected =
     Number(first.evidence?.totalCount || 0) > 0 &&
     first.evidence?.spaceName === 'Supervisor Evidence' &&
@@ -97,12 +101,16 @@ function evaluateDagCache(first, second, keyComparison) {
       exactWorkers &&
       independent &&
       keysStable &&
+      firstPlanCachePrimed &&
+      secondPlanCacheHit &&
       fullCacheHit &&
       evidenceProjected &&
       completedWithoutRunError,
     exactWorkers,
     independent,
     keysStable,
+    firstPlanCachePrimed,
+    secondPlanCacheHit,
     fullCacheHit,
     evidenceProjected,
     completedWithoutRunError,
@@ -186,6 +194,9 @@ async function runOne({
     eventCounts: snapshot.eventCounts || {},
     approval: snapshot.approval || {},
     workers: snapshot.workers || [],
+    terminalRunning: snapshot.running === true,
+    cancelled: snapshot.cancelled === true,
+    cancelledAt: snapshot.cancelledAt || '',
     runError,
     evidence: evidence
       ? {
@@ -255,7 +266,8 @@ if (mode === 'plan-cache-small') {
       results.planCacheSmallFirst.planCacheMisses >= 1 &&
       results.planCacheSmallFirst.planCacheStores >= 1 &&
       results.planCacheSmallSecond.planCacheHits >= 1 &&
-      results.planCacheSmallSecond.cacheHits >= expectedIds.length &&
+      results.planCacheSmallSecond.cacheHits === expectedIds.length &&
+      results.planCacheSmallSecond.cacheMisses === 0 &&
       stableWorkers,
     firstRunCompleted: !results.planCacheSmallFirst.runError,
     secondRunCompleted: !results.planCacheSmallSecond.runError,
@@ -263,6 +275,7 @@ if (mode === 'plan-cache-small') {
     firstPlanCacheStores: results.planCacheSmallFirst.planCacheStores,
     secondPlanCacheHits: results.planCacheSmallSecond.planCacheHits,
     secondResultCacheHits: results.planCacheSmallSecond.cacheHits,
+    secondResultCacheMisses: results.planCacheSmallSecond.cacheMisses,
     expectedResultCacheHits: expectedIds.length,
     stableWorkers,
     firstWorkerIds: firstIds,
@@ -377,25 +390,41 @@ if (mode === 'all' || mode === 'writer-approval') {
     markerContent = (await readFile(marker, 'utf8')).trim();
   } catch {}
   await rm(marker, { force: true });
+  let markerCleaned = false;
+  try {
+    await stat(marker);
+  } catch {
+    markerCleaned = true;
+  }
+  const finalApprovalStatus = String(result.approval?.status || '');
   results.writerApproval = {
     ...result,
     approvalSent,
     approvalResponse,
     markerExists,
     markerContent,
-    markerCleaned: true,
+    markerCleaned,
   };
   results.writerApprovalVerdict = {
     pass:
       approvalSent &&
+      approvalResponse?.ok === true &&
       !result.runError &&
+      result.terminalRunning === false &&
       markerExists &&
       markerContent === 'OPENDOTS_WRITER_APPROVED' &&
-      result.approvalResolved >= 1,
+      markerCleaned &&
+      result.approvalRequired >= 1 &&
+      result.approvalResolved >= 1 &&
+      finalApprovalStatus === 'approved',
     approvalSent,
+    approvalAccepted: approvalResponse?.ok === true,
+    approvalRequiredEvents: result.approvalRequired,
     approvalResolvedEvents: result.approvalResolved,
+    finalApprovalStatus,
     markerExact: markerContent === 'OPENDOTS_WRITER_APPROVED',
-    runCompleted: !result.runError,
+    markerCleaned,
+    runCompleted: !result.runError && result.terminalRunning === false,
   };
 }
 
@@ -437,15 +466,21 @@ if (mode === 'all' || mode === 'cancel') {
     },
   });
   results.cancel = { ...result, cancelSent, cancelResponse };
+  const cancelCode = result.runError?.code || '';
   results.cancelVerdict = {
     pass:
       cancelSent &&
       cancelResponse?.ok === true &&
-      !!result.runError,
+      cancelResponse?.cancelled === true &&
+      result.cancelled === true &&
+      result.terminalRunning === false &&
+      cancelCode === 'SUPERVISOR_CANCELLED',
     cancelSent,
     cancelAccepted: cancelResponse?.ok === true,
-    runTerminatedWithError: !!result.runError,
-    runErrorCode: result.runError?.code || '',
+    cancelResponseMarkedCancelled: cancelResponse?.cancelled === true,
+    terminalCancelled: result.cancelled === true,
+    terminalStopped: result.terminalRunning === false,
+    runErrorCode: cancelCode,
   };
 }
 
