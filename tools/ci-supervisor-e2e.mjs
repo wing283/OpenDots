@@ -71,6 +71,53 @@ async function runSoakMode(mode, dotId, appPort, workspacePath = '') {
   return JSON.parse(processResult.stdout.trim());
 }
 
+async function createSupervisorRun(title, prompt) {
+  const response = await fetch(
+    `http://127.0.0.1:${appPort}/api/conversations`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dotId, title }),
+    },
+  );
+  if (!response.ok)
+    throw new Error(
+      `Conversation creation failed: ${response.status} ${await response.text()}`,
+    );
+  const conversation = await response.json();
+  const runAgent = new ProxiedCopilotRuntimeAgent({
+    runtimeUrl: `http://127.0.0.1:${appPort}/api/copilotkit`,
+    agentId: `ci-recovery-action-${randomUUID()}`,
+    runtimeAgentId: dotId,
+  });
+  runAgent.threadId = conversation.id;
+  runAgent.addMessage({
+    id: randomUUID(),
+    role: 'user',
+    content: prompt,
+  });
+  return { conversation, runAgent };
+}
+
+async function waitThreadState(threadId, predicate, label) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const response = await fetch(
+      `http://127.0.0.1:${appPort}/api/supervisor/thread-status`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ threadId }),
+      },
+    );
+    if (response.ok) {
+      const body = await response.json();
+      if (predicate(body)) return body;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`Timed out waiting for Supervisor thread state: ${label}`);
+}
+
 async function waitFor(url, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
   let lastError;
@@ -333,6 +380,200 @@ try {
     );
   await recoveryAgent.detachActiveRun().catch(() => {});
 
+  const writerPrompt = [
+    'Create exactly one worker. It must be mode=writer and complexity=light.',
+    'Modify exactly OPENDOTS_SOAK_WRITER_MARKER.txt in the current working directory.',
+    'The complete file content must be exactly: OPENDOTS_WRITER_APPROVED',
+    'Do not modify any other file.',
+  ].join('\n');
+
+  await rm(join(root, 'OPENDOTS_SOAK_WRITER_MARKER.txt'), { force: true });
+  const reloadApproval = await createSupervisorRun(
+    'CI writer approval after reload',
+    writerPrompt,
+  );
+  let reloadApprovalError = null;
+  const reloadApprovalSub = reloadApproval.runAgent.subscribe({
+    onRunErrorEvent: ({ event }) => {
+      reloadApprovalError = {
+        code: event.code || '',
+        message: event.message || '',
+      };
+    },
+  });
+  const reloadApprovalRun = reloadApproval.runAgent.runAgent();
+  const pendingApproval = await waitThreadState(
+    reloadApproval.conversation.id,
+    (body) =>
+      body.snapshot?.running === true &&
+      body.snapshot?.approval?.status === 'pending',
+    'writer approval pending',
+  );
+  const approveAfterReload = await fetch(
+    `http://127.0.0.1:${appPort}/api/supervisor/approval`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        threadId: reloadApproval.conversation.id,
+        supervisorRunId: pendingApproval.snapshot.supervisorRunId,
+        decision: 'approve',
+      }),
+    },
+  );
+  if (!approveAfterReload.ok)
+    throw new Error(
+      `Approval after reload failed: ${approveAfterReload.status} ${await approveAfterReload.text()}`,
+    );
+  await reloadApprovalRun;
+  reloadApprovalSub.unsubscribe();
+  if (reloadApprovalError)
+    throw new Error(
+      `Approval-after-reload run failed: ${JSON.stringify(reloadApprovalError)}`,
+    );
+  const approvedAfterReload = await waitThreadState(
+    reloadApproval.conversation.id,
+    (body) =>
+      body.snapshot?.running === false &&
+      body.snapshot?.approval?.status === 'approved',
+    'writer approved terminal state',
+  );
+  if (
+    approvedAfterReload.finalMessage?.content !== 'ci-writer-approved' ||
+    approvedAfterReload.snapshot?.supervisorRunId !==
+      pendingApproval.snapshot?.supervisorRunId
+  )
+    throw new Error(
+      `Approval-after-reload recovery mismatch: ${JSON.stringify(approvedAfterReload)}`,
+    );
+  await reloadApproval.runAgent.detachActiveRun().catch(() => {});
+  await rm(join(root, 'OPENDOTS_SOAK_WRITER_MARKER.txt'), { force: true });
+
+  const reloadDecline = await createSupervisorRun(
+    'CI writer decline after reload',
+    writerPrompt,
+  );
+  let reloadDeclineError = null;
+  const reloadDeclineSub = reloadDecline.runAgent.subscribe({
+    onRunErrorEvent: ({ event }) => {
+      reloadDeclineError = {
+        code: event.code || '',
+        message: event.message || '',
+      };
+    },
+  });
+  const reloadDeclineRun = reloadDecline.runAgent.runAgent();
+  const pendingDecline = await waitThreadState(
+    reloadDecline.conversation.id,
+    (body) =>
+      body.snapshot?.running === true &&
+      body.snapshot?.approval?.status === 'pending',
+    'writer decline pending',
+  );
+  const declineAfterReload = await fetch(
+    `http://127.0.0.1:${appPort}/api/supervisor/approval`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        threadId: reloadDecline.conversation.id,
+        supervisorRunId: pendingDecline.snapshot.supervisorRunId,
+        decision: 'decline',
+      }),
+    },
+  );
+  if (!declineAfterReload.ok)
+    throw new Error(
+      `Decline after reload failed: ${declineAfterReload.status} ${await declineAfterReload.text()}`,
+    );
+  await reloadDeclineRun;
+  reloadDeclineSub.unsubscribe();
+  if (reloadDeclineError?.code !== 'SUPERVISOR_APPROVAL_DECLINED')
+    throw new Error(
+      `Decline-after-reload error mismatch: ${JSON.stringify(reloadDeclineError)}`,
+    );
+  const declinedAfterReload = await waitThreadState(
+    reloadDecline.conversation.id,
+    (body) =>
+      body.snapshot?.running === false &&
+      body.snapshot?.approval?.status === 'declined',
+    'writer declined terminal state',
+  );
+  if (
+    declinedAfterReload.bindingStatus !== 'declined' ||
+    declinedAfterReload.snapshot?.supervisorRunId !==
+      pendingDecline.snapshot?.supervisorRunId
+  )
+    throw new Error(
+      `Decline-after-reload recovery mismatch: ${JSON.stringify(declinedAfterReload)}`,
+    );
+  await reloadDecline.runAgent.detachActiveRun().catch(() => {});
+
+  const cancelPrompt = [
+    'Create four independent heavy read_only engineering-analysis workers.',
+    'Each worker must perform a distinct multi-step trade study of a hypothetical 24 V robot servo: thermal, power integrity, control latency, and CAN-FD robustness.',
+    'Do not modify files or perform external actions.',
+    'Provide detailed evidence-backed reasoning in every worker.',
+  ].join('\n');
+  const reloadCancel = await createSupervisorRun(
+    'CI cancel after reload',
+    cancelPrompt,
+  );
+  let reloadCancelError = null;
+  const reloadCancelSub = reloadCancel.runAgent.subscribe({
+    onRunErrorEvent: ({ event }) => {
+      reloadCancelError = {
+        code: event.code || '',
+        message: event.message || '',
+      };
+    },
+  });
+  const reloadCancelRun = reloadCancel.runAgent.runAgent();
+  const activeCancel = await waitThreadState(
+    reloadCancel.conversation.id,
+    (body) =>
+      body.snapshot?.running === true &&
+      Boolean(body.snapshot?.supervisorRunId),
+    'cancel active state',
+  );
+  const cancelAfterReload = await fetch(
+    `http://127.0.0.1:${appPort}/api/supervisor/cancel`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        threadId: reloadCancel.conversation.id,
+        supervisorRunId: activeCancel.snapshot.supervisorRunId,
+        supervisorPid: activeCancel.snapshot.supervisorPid,
+      }),
+    },
+  );
+  if (!cancelAfterReload.ok)
+    throw new Error(
+      `Cancel after reload failed: ${cancelAfterReload.status} ${await cancelAfterReload.text()}`,
+    );
+  await reloadCancelRun;
+  reloadCancelSub.unsubscribe();
+  if (reloadCancelError?.code !== 'SUPERVISOR_CANCELLED')
+    throw new Error(
+      `Cancel-after-reload error mismatch: ${JSON.stringify(reloadCancelError)}`,
+    );
+  const cancelledAfterReload = await waitThreadState(
+    reloadCancel.conversation.id,
+    (body) =>
+      body.snapshot?.running === false && body.snapshot?.cancelled === true,
+    'cancelled terminal state',
+  );
+  if (
+    cancelledAfterReload.bindingStatus !== 'cancelled' ||
+    cancelledAfterReload.snapshot?.supervisorRunId !==
+      activeCancel.snapshot?.supervisorRunId
+  )
+    throw new Error(
+      `Cancel-after-reload recovery mismatch: ${JSON.stringify(cancelledAfterReload)}`,
+    );
+  await reloadCancel.runAgent.detachActiveRun().catch(() => {});
+
   const planCacheSoak = await runSoakMode(
     'plan-cache-small',
     dotId,
@@ -433,6 +674,23 @@ try {
           supervisorRunId: terminalRecovery.snapshot?.supervisorRunId,
           running: terminalRecovery.snapshot?.running,
           finalMessageId: terminalRecovery.finalMessage?.id,
+        },
+        reloadHitlRecovery: {
+          approval: {
+            runId: approvedAfterReload.snapshot?.supervisorRunId,
+            status: approvedAfterReload.snapshot?.approval?.status,
+            finalMessageId: approvedAfterReload.finalMessage?.id,
+          },
+          decline: {
+            runId: declinedAfterReload.snapshot?.supervisorRunId,
+            status: declinedAfterReload.snapshot?.approval?.status,
+            errorCode: reloadDeclineError?.code,
+          },
+          cancel: {
+            runId: cancelledAfterReload.snapshot?.supervisorRunId,
+            cancelled: cancelledAfterReload.snapshot?.cancelled,
+            errorCode: reloadCancelError?.code,
+          },
         },
         planCacheSmallVerdict: planCacheSoak.planCacheSmallVerdict,
         dagCacheVerdict: dagCacheSoak.dagCacheVerdict,
