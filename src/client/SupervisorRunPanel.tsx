@@ -182,10 +182,10 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
   );
   const hasTokenCostReport = (snapshot.eventCounts.TOKEN_COST_REPORT ?? 0) > 0;
   const totalTokens = hasTokenCostReport
-    ? snapshot.runMetrics?.actualTokens ?? 0
+    ? (snapshot.runMetrics?.actualTokens ?? 0)
     : workerTokens;
   const totalCost = hasTokenCostReport
-    ? snapshot.runMetrics?.actualCostUsd ?? 0
+    ? (snapshot.runMetrics?.actualCostUsd ?? 0)
     : workerCost;
   const baselineCost = snapshot.runMetrics?.baselineCostUsd ?? 0;
   const savingsPercent = snapshot.runMetrics?.costSavingsPercent ?? 0;
