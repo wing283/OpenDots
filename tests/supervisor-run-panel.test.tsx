@@ -138,6 +138,33 @@ it('renders cancelled Supervisor runs distinctly from normal completion', () => 
   expect(html).not.toContain('>Finished<');
 });
 
+it('renders declined writer approval as a distinct terminal state', () => {
+  const state = {
+    bridge: 'supervisor-agui',
+    bridgeRunId: 'bridge-declined',
+    supervisorRunId: 'sv-declined',
+    supervisorPid: 0,
+    running: false,
+    cancelled: false,
+    cancelledAt: '',
+    recoveryState: 'declined',
+    bindingStatus: 'declined',
+    activeCount: 0,
+    capacity: 3,
+    eventCounts: {},
+    approval: {
+      status: 'declined',
+      decision: 'decline',
+      writers: [{ id: 'writer', title: 'Writer' }],
+    },
+    workers: [],
+  };
+  const html = renderToStaticMarkup(<SupervisorRunPanel state={state} />);
+  expect(html).toContain('Declined');
+  expect(html).not.toContain('Stop run');
+  expect(html).not.toContain('>Finished<');
+});
+
 it('shows uncertain recovery without exposing Stop run', () => {
   const state = {
     bridge: 'supervisor-agui',
