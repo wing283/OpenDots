@@ -322,7 +322,11 @@ try {
   const terminalRecovery = await terminalRecoveryResponse.json();
   if (
     terminalRecovery.snapshot?.running !== false ||
-    terminalRecovery.bindingStatus !== 'finished'
+    terminalRecovery.bindingStatus !== 'finished' ||
+    terminalRecovery.finalMessage?.id !==
+      'supervisor-recovery:ci-recovery-active-run:final' ||
+    terminalRecovery.finalMessage?.role !== 'assistant' ||
+    terminalRecovery.finalMessage?.content !== 'ci-recovery-ok'
   )
     throw new Error(
       `Terminal recovery mismatch: ${JSON.stringify(terminalRecovery)}`,
@@ -428,6 +432,7 @@ try {
           correlationState: terminalRecovery.correlationState,
           supervisorRunId: terminalRecovery.snapshot?.supervisorRunId,
           running: terminalRecovery.snapshot?.running,
+          finalMessageId: terminalRecovery.finalMessage?.id,
         },
         planCacheSmallVerdict: planCacheSoak.planCacheSmallVerdict,
         dagCacheVerdict: dagCacheSoak.dagCacheVerdict,
