@@ -12,8 +12,7 @@ export function recoveredSupervisorMessage(
   const raw = value as Record<string, unknown>;
   const id = typeof raw.id === 'string' ? raw.id.trim() : '';
   const role = raw.role === 'assistant' ? 'assistant' : '';
-  const content =
-    typeof raw.content === 'string' ? raw.content.trim() : '';
+  const content = typeof raw.content === 'string' ? raw.content.trim() : '';
   if (!id || !role || !content) return null;
   const ids = new Set(existingIds);
   if (ids.has(id)) return null;
