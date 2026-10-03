@@ -233,7 +233,6 @@ export function Chat({
 
     let active = true;
     let timer: number | undefined;
-    let trackingActiveRun = false;
     setSupervisorRecoveryReady(false);
 
     const scheduleRefresh = () => {
@@ -260,8 +259,6 @@ export function Chat({
         setRunning(restored.running);
         setError('');
         setSupervisorRecoveryReady(true);
-        trackingActiveRun = restored.running;
-
         if (restored.running) scheduleRefresh();
       } catch (error) {
         if (!active) return;
@@ -269,7 +266,6 @@ export function Chat({
           // No prior binding is the normal case for a fresh Supervisor thread.
           setError('');
           setSupervisorRecoveryReady(true);
-          trackingActiveRun = false;
           return;
         }
         setSupervisorRecoveryReady(false);
