@@ -24,6 +24,8 @@ export type SupervisorSnapshot = {
   supervisorRunId: string;
   supervisorPid: number;
   running: boolean;
+  cancelled: boolean;
+  cancelledAt: string;
   activeCount: number;
   capacity: number;
   workers: Worker[];
@@ -98,6 +100,8 @@ export function supervisorSnapshot(value: unknown): SupervisorSnapshot | null {
     supervisorRunId: text(raw.supervisorRunId),
     supervisorPid: number(raw.supervisorPid),
     running: Boolean(raw.running),
+    cancelled: raw.cancelled === true,
+    cancelledAt: text(raw.cancelledAt),
     activeCount: number(raw.activeCount),
     capacity: number(raw.capacity),
     workers,
@@ -269,7 +273,13 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
       <div className="supervisor-run-heading">
         <div>
           <strong>Supervisor DAG</strong>
-          <span>{snapshot.running ? 'Running' : 'Finished'}</span>
+          <span>
+            {snapshot.running
+              ? 'Running'
+              : snapshot.cancelled
+                ? 'Cancelled'
+                : 'Finished'}
+          </span>
         </div>
         <div className="supervisor-run-heading-actions">
           <code>{snapshot.supervisorRunId || 'starting…'}</code>
