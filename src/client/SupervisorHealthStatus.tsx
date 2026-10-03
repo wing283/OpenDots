@@ -11,6 +11,12 @@ export type SupervisorHealth = {
     activeCount?: number;
     capacity?: number;
     cdpReady?: boolean;
+    spendGuard?: {
+      enabled: boolean;
+      maxActualUsd: number;
+      source?: string;
+      error?: string;
+    };
   };
 };
 
@@ -22,6 +28,10 @@ export function normalizeSupervisorHealth(
   const execution =
     raw.execution && typeof raw.execution === 'object'
       ? (raw.execution as Record<string, unknown>)
+      : {};
+  const spendGuard =
+    execution.spendGuard && typeof execution.spendGuard === 'object'
+      ? (execution.spendGuard as Record<string, unknown>)
       : {};
   return {
     ok: raw.ok === true,
@@ -38,6 +48,17 @@ export function normalizeSupervisorHealth(
         typeof execution.activeCount === 'number' ? execution.activeCount : 0,
       capacity: typeof execution.capacity === 'number' ? execution.capacity : 0,
       cdpReady: execution.cdpReady === true,
+      spendGuard: {
+        enabled: spendGuard.enabled === true,
+        maxActualUsd:
+          typeof spendGuard.maxActualUsd === 'number'
+            ? spendGuard.maxActualUsd
+            : 0,
+        source:
+          typeof spendGuard.source === 'string' ? spendGuard.source : undefined,
+        error:
+          typeof spendGuard.error === 'string' ? spendGuard.error : undefined,
+      },
     },
   };
 }
@@ -103,11 +124,18 @@ export function SupervisorHealthStatus({ enabled }: { enabled: boolean }) {
     );
 
   const missing = health.execution?.missingRequiredEnv ?? [];
+  const spendGuard = health.execution?.spendGuard;
+  const spendLabel =
+    spendGuard?.enabled && spendGuard.maxActualUsd > 0
+      ? ` · cap ${spendGuard.maxActualUsd.toFixed(2)}/run`
+      : '';
   const detail = health.runReady
-    ? `${health.execution?.activeCount ?? 0}/${health.execution?.capacity ?? 0} workflows active`
+    ? `${health.execution?.activeCount ?? 0}/${health.execution?.capacity ?? 0} workflows active${spendLabel}`
     : missing.length
       ? `Missing: ${missing.join(', ')}`
-      : 'Execution prerequisites are not ready.';
+      : spendGuard?.error
+        ? `Spend guard: ${spendGuard.error}`
+        : 'Execution prerequisites are not ready.';
 
   return (
     <div
