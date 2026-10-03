@@ -15,10 +15,11 @@ import {
   createWorkspaceAgent,
   validateSupervisorAgentConfig,
 } from './agent-factory.js';
-import { runThreadTurn } from './headless.js';
+import { runSupervisorThreadTurn, runThreadTurn } from './headless.js';
 import { setupStatus, type PlatformConfig } from './platform-config.js';
 import { validateRuntimeScope } from './runtime-scope.js';
 import { learningSelector } from './learning.js';
+import { voiceReceiptMessagePrefix } from '../shared/voice-receipt.js';
 export class Platform {
   private channelStartupFailed = false;
   readonly pages: PageService;
@@ -220,6 +221,43 @@ export class Platform {
   ): Promise<string> {
     const thread = this.workspace.requireThread(threadId);
     this.requireReady(thread.dotId);
+
+    if (
+      thread.dotId === this.config.supervisorDotId &&
+      this.config.supervisorAguiUrl
+    ) {
+      const userMessage = {
+        id: `${
+          metadata?.opendotsSource === 'voice_receipt'
+            ? voiceReceiptMessagePrefix
+            : ''
+        }${randomUUID()}`,
+        role: 'user' as const,
+        content: prompt,
+      };
+      this.workspace.appendSupervisorMessage(threadId, userMessage);
+      const messages = this.workspace
+        .supervisorMessages(threadId)
+        .slice(-24)
+        .map(({ id, role, content }) => ({ id, role, content }));
+      const result = await runSupervisorThreadTurn(
+        this.config.supervisorAguiUrl,
+        this.config.supervisorAguiToken,
+        thread.dotId,
+        threadId,
+        messages,
+        signal,
+      );
+      this.workspace.appendSupervisorMessage(threadId, {
+        id: result.supervisorRunId
+          ? `supervisor-recovery:${result.supervisorRunId}:final`
+          : randomUUID(),
+        role: 'assistant',
+        content: result.text,
+      });
+      return result.text;
+    }
+
     return runThreadTurn(
       this.config.runtimeUrl,
       this.config.ownerToken
