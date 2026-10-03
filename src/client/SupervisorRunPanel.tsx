@@ -286,9 +286,12 @@ export function SupervisorRunPanel({
         <div>
           <strong>Supervisor DAG</strong>
           <span>
-            {snapshot.recoveryState === 'uncertain'
-              ? 'Reconnecting…'
-              : snapshot.bindingStatus === 'declined' ||
+            {snapshot.recoveryState === 'starting' ||
+            snapshot.bindingStatus === 'reserving'
+              ? 'Starting…'
+              : snapshot.recoveryState === 'uncertain'
+                ? 'Reconnecting…'
+                : snapshot.bindingStatus === 'declined' ||
                   snapshot.recoveryState === 'declined'
                 ? 'Declined'
                 : snapshot.bindingStatus === 'failed' ||
