@@ -165,6 +165,48 @@ it('renders declined writer approval as a distinct terminal state', () => {
   expect(html).not.toContain('>Finished<');
 });
 
+it('renders stale recovered runs as interrupted', () => {
+  const state = {
+    bridge: 'supervisor-agui',
+    bridgeRunId: 'bridge-stale',
+    supervisorRunId: 'sv-stale',
+    supervisorPid: 0,
+    running: false,
+    cancelled: false,
+    cancelledAt: '',
+    recoveryState: 'stale',
+    bindingStatus: 'stale',
+    activeCount: 0,
+    capacity: 3,
+    eventCounts: {},
+    workers: [],
+  };
+  const html = renderToStaticMarkup(<SupervisorRunPanel state={state} />);
+  expect(html).toContain('Interrupted');
+  expect(html).not.toContain('>Finished<');
+});
+
+it('renders failed recovered runs as failed', () => {
+  const state = {
+    bridge: 'supervisor-agui',
+    bridgeRunId: 'bridge-failed',
+    supervisorRunId: 'sv-failed',
+    supervisorPid: 0,
+    running: false,
+    cancelled: false,
+    cancelledAt: '',
+    recoveryState: 'failed',
+    bindingStatus: 'failed',
+    activeCount: 0,
+    capacity: 3,
+    eventCounts: {},
+    workers: [],
+  };
+  const html = renderToStaticMarkup(<SupervisorRunPanel state={state} />);
+  expect(html).toContain('Failed');
+  expect(html).not.toContain('>Finished<');
+});
+
 it('shows uncertain recovery without exposing Stop run', () => {
   const state = {
     bridge: 'supervisor-agui',
