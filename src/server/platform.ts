@@ -163,7 +163,7 @@ export class Platform {
     const thread = this.workspace.requireThread(threadId);
     this.requireReady(thread.dotId);
     if (!this.intelligence && thread.dotId === this.config.supervisorDotId)
-      return '';
+      return this.workspace.supervisorHistory(threadId);
     const history = await this.intelligence!.getThreadMessages({
       threadId,
       userId: this.workspace.ownerId,
