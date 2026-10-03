@@ -24,6 +24,48 @@ it('reuses one actual Intelligence thread per page and Dot under concurrent requ
   expect(ws.pages.forThread(a.id, dot.spaceId)?.id).toBe(page.id);
   ws.close();
 });
+it('creates and saves a local Supervisor page conversation without Intelligence', async () => {
+  const ws = new WorkspaceStore(':memory:', 'owner');
+  const dot = ws.dots()[0];
+  const page = ws.pages.create(dot.spaceId, { title: 'Supervisor brief' });
+  const getSdk = vi.fn(() => {
+    throw new Error('Local Supervisor page must not contact Intelligence');
+  });
+  const service = new PageService(
+    ws,
+    getSdk,
+    (dotId) => dotId === dot.id,
+  );
+
+  const thread = await service.conversation(dot.spaceId, page.id, dot.id);
+  expect(thread.dotId).toBe(dot.id);
+  expect(ws.pages.forThread(thread.id, dot.spaceId)?.id).toBe(page.id);
+  expect(getSdk).not.toHaveBeenCalled();
+
+  ws.appendSupervisorMessage(thread.id, {
+    id: 'user-local',
+    role: 'user',
+    content: 'Review this design.',
+  });
+  ws.appendSupervisorMessage(thread.id, {
+    id: 'assistant-local',
+    role: 'assistant',
+    content: 'The design is internally consistent.',
+  });
+
+  const saved = await service.saveConversation(
+    thread.id,
+    'Supervisor saved',
+    null,
+  );
+  expect(saved.content).toBe(
+    '## You\n\nReview this design.\n\n## Dot\n\nThe design is internally consistent.',
+  );
+  expect(saved.sourceThreadId).toBe(thread.id);
+  expect(getSdk).not.toHaveBeenCalled();
+  ws.close();
+});
+
 it('exports canonical user/assistant text and rejects failed or oversized history without creating a page', async () => {
   const ws = new WorkspaceStore(':memory:', 'owner');
   const dot = ws.dots()[0];
