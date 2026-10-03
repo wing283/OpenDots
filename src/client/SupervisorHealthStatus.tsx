@@ -17,6 +17,10 @@ export type SupervisorHealth = {
       source?: string;
       error?: string;
     };
+    threadBindingStore?: {
+      healthy: boolean;
+      error?: string;
+    };
   };
 };
 
@@ -32,6 +36,11 @@ export function normalizeSupervisorHealth(
   const spendGuard =
     execution.spendGuard && typeof execution.spendGuard === 'object'
       ? (execution.spendGuard as Record<string, unknown>)
+      : {};
+  const threadBindingStore =
+    execution.threadBindingStore &&
+    typeof execution.threadBindingStore === 'object'
+      ? (execution.threadBindingStore as Record<string, unknown>)
       : {};
   return {
     ok: raw.ok === true,
@@ -58,6 +67,13 @@ export function normalizeSupervisorHealth(
           typeof spendGuard.source === 'string' ? spendGuard.source : undefined,
         error:
           typeof spendGuard.error === 'string' ? spendGuard.error : undefined,
+      },
+      threadBindingStore: {
+        healthy: threadBindingStore.healthy !== false,
+        error:
+          typeof threadBindingStore.error === 'string'
+            ? threadBindingStore.error
+            : undefined,
       },
     },
   };
@@ -133,9 +149,11 @@ export function SupervisorHealthStatus({ enabled }: { enabled: boolean }) {
     ? `${health.execution?.activeCount ?? 0}/${health.execution?.capacity ?? 0} workflows active${spendLabel}`
     : missing.length
       ? `Missing: ${missing.join(', ')}`
-      : spendGuard?.error
-        ? `Spend guard: ${spendGuard.error}`
-        : 'Execution prerequisites are not ready.';
+      : health.execution?.threadBindingStore?.error
+        ? health.execution.threadBindingStore.error
+        : spendGuard?.error
+          ? `Spend guard: ${spendGuard.error}`
+          : 'Execution prerequisites are not ready.';
 
   return (
     <div
