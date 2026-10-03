@@ -54,3 +54,60 @@ it('migrates legacy Space ownership once and never restores revoked access on re
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+it('persists Supervisor messages idempotently across workspace restart', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'opendots-supervisor-messages-'));
+  const path = join(dir, 'workspace.sqlite');
+  try {
+    const first = new WorkspaceStore(path, 'owner');
+    const dot = first.dots()[0];
+    first.bindThread('supervisor-thread', dot.id, 'Supervisor');
+    const user = first.appendSupervisorMessage('supervisor-thread', {
+      id: 'user-1',
+      role: 'user',
+      content: 'Continue the Supervisor run.',
+    });
+    const duplicate = first.appendSupervisorMessage('supervisor-thread', {
+      id: 'user-1',
+      role: 'user',
+      content: 'Continue the Supervisor run.',
+    });
+    expect(duplicate).toEqual(user);
+    first.appendSupervisorMessage('supervisor-thread', {
+      id: 'assistant-1',
+      role: 'assistant',
+      content: 'Supervisor completed.',
+    });
+    expect(() =>
+      first.appendSupervisorMessage('supervisor-thread', {
+        id: 'user-1',
+        role: 'user',
+        content: 'Different content.',
+      }),
+    ).toThrow('already bound');
+    first.close();
+
+    const reopened = new WorkspaceStore(path, 'owner');
+    expect(reopened.supervisorMessages('supervisor-thread')).toMatchObject([
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Continue the Supervisor run.',
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Supervisor completed.',
+      },
+    ]);
+    expect(reopened.supervisorHistory('supervisor-thread')).toContain(
+      'user: Continue the Supervisor run.',
+    );
+    expect(reopened.supervisorHistory('supervisor-thread')).toContain(
+      'assistant: Supervisor completed.',
+    );
+    reopened.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
