@@ -8,6 +8,7 @@ let planCacheSoakRuns = 0;
 let dagCacheSoakRuns = 0;
 const approvals = new Map();
 const cancellations = new Map();
+const recoveries = new Map();
 const threadSnapshots = new Map();
 
 async function readJson(req) {
@@ -138,6 +139,19 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && req.url === '/ci/release-recovery') {
+    const body = await readJson(req);
+    const threadId = String(body.threadId || '');
+    const state = recoveries.get(threadId);
+    if (!state) {
+      sendJson(res, 404, { ok: false, error: 'recovery run not found' });
+      return;
+    }
+    state.released = true;
+    sendJson(res, 200, { ok: true, threadId });
+    return;
+  }
+
   if (req.method === 'POST' && req.url === '/evidence') {
     const body = await readJson(req);
     const runId = String(body.supervisorRunId || 'ci-supervisor-run');
@@ -229,12 +243,78 @@ const server = http.createServer(async (req, res) => {
   const isCancelSoak = prompt.includes(
     'Create four independent heavy read_only engineering-analysis workers.',
   );
+  const isRecoveryHold = prompt.includes('CI Supervisor recovery hold');
 
   res.writeHead(200, {
     'content-type': 'text/event-stream; charset=utf-8',
     'cache-control': 'no-cache',
     connection: 'close',
   });
+
+  if (isRecoveryHold) {
+    const supervisorRunId = 'ci-recovery-active-run';
+    const recoveryWorkers = [
+      {
+        ...worker('recovery_worker'),
+        status: 'running',
+        action: 'WORK',
+        phase: 'worker',
+      },
+    ];
+    recoveries.set(threadId, { released: false });
+    writeSse(res, { type: 'RUN_STARTED', threadId, runId });
+    const active = snapshot({
+      bridgeRunId: runId,
+      supervisorRunId,
+      running: true,
+      workers: recoveryWorkers,
+    });
+    active.snapshot.bindingStatus = 'active';
+    active.snapshot.recoveryState = 'matched';
+    threadSnapshots.set(threadId, active.snapshot);
+    writeSse(res, active);
+
+    const released = await waitUntil(
+      () => recoveries.get(threadId)?.released === true,
+      15000,
+    );
+    if (!released) {
+      writeSse(res, {
+        type: 'RUN_ERROR',
+        code: 'CI_RECOVERY_TIMEOUT',
+        message: 'CI recovery hold was not released.',
+      });
+      recoveries.delete(threadId);
+      res.end();
+      return;
+    }
+
+    writeSse(res, {
+      type: 'TEXT_MESSAGE_START',
+      messageId,
+      role: 'assistant',
+    });
+    writeSse(res, {
+      type: 'TEXT_MESSAGE_CONTENT',
+      messageId,
+      delta: 'ci-recovery-ok',
+    });
+    writeSse(res, { type: 'TEXT_MESSAGE_END', messageId });
+    const done = snapshot({
+      bridgeRunId: runId,
+      supervisorRunId,
+      running: false,
+      workers: [worker('recovery_worker')],
+    });
+    done.snapshot.bindingStatus = 'finished';
+    done.snapshot.recoveryState = 'finished';
+    threadSnapshots.set(threadId, done.snapshot);
+    writeSse(res, done);
+    writeSse(res, { type: 'RUN_FINISHED', threadId, runId });
+    recoveries.delete(threadId);
+    res.end();
+    return;
+  }
 
   if (isWriterSoak) {
     const supervisorRunId = 'ci-writer-run';
