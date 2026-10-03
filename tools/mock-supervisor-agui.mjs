@@ -119,19 +119,20 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
-    sendJson(res, 200, {
-      ok: true,
-      threadId,
-      bindingStatus: restored.cancelled
+    const restoredStatus =
+      String(restored.bindingStatus || '') ||
+      (restored.cancelled
         ? 'cancelled'
         : restored.running
           ? 'active'
-          : 'finished',
-      correlationState: restored.cancelled
-        ? 'cancelled'
-        : restored.running
-          ? 'matched'
-          : 'finished',
+          : 'finished');
+    sendJson(res, 200, {
+      ok: true,
+      threadId,
+      bindingStatus: restoredStatus,
+      correlationState:
+        String(restored.recoveryState || '') ||
+        (restoredStatus === 'active' ? 'matched' : restoredStatus),
       snapshot: restored,
     });
     return;
