@@ -1,0 +1,28 @@
+name: Supervisor Recovery Format Diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/supervisor-integration
+    paths:
+      - ".github/workflows/supervisor-recovery-format.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Print recovery Prettier diff
+        run: |
+          npx prettier --write src/client/Chat.tsx src/client/SupervisorRunPanel.tsx src/server/supervisor-routes.ts tests/supervisor-run-panel.test.tsx tests/supervisor-routes.test.ts
+          git diff --no-color -- src/client/Chat.tsx src/client/SupervisorRunPanel.tsx src/server/supervisor-routes.ts tests/supervisor-run-panel.test.tsx tests/supervisor-routes.test.ts
