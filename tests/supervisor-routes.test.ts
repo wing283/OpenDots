@@ -21,10 +21,25 @@ function setup() {
 
 afterEach(() => vi.unstubAllGlobals());
 
-it('proxies approval to the configured bridge', async () => {
-  const { workspace, config } = setup();
+it('proxies approval only after thread/run scope validation', async () => {
+  const { workspace, config, dot } = setup();
   try {
-    const fetchMock = vi.fn(async (_url: URL, init?: RequestInit) => {
+    workspace.bindThread('thread-approval', dot.id, 'Approval');
+    const fetchMock = vi.fn(async (url: URL, init?: RequestInit) => {
+      if (url.pathname.endsWith('/thread-status')) {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          threadId: 'thread-approval',
+        });
+        return Response.json({
+          ok: true,
+          snapshot: {
+            bridge: 'supervisor-agui',
+            supervisorRunId: 'sv-1',
+            running: true,
+          },
+        });
+      }
+      expect(url.toString()).toBe('http://127.0.0.1:8791/approval');
       expect(init?.headers).toMatchObject({
         Authorization: 'Bearer test-token',
         'Content-Type': 'application/json',
@@ -41,6 +56,7 @@ it('proxies approval to the configured bridge', async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        threadId: 'thread-approval',
         supervisorRunId: 'sv-1',
         decision: 'approve',
       }),
@@ -49,18 +65,27 @@ it('proxies approval to the configured bridge', async () => {
     expect(await response.json()).toMatchObject({
       approval: { status: 'approved' },
     });
-    expect(fetchMock).toHaveBeenCalledOnce();
-    const [url] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
-    expect(url.toString()).toBe('http://127.0.0.1:8791/approval');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   } finally {
     workspace.close();
   }
 });
 
-it('proxies writer decline to the configured bridge', async () => {
-  const { workspace, config } = setup();
+it('proxies writer decline only for the bound conversation run', async () => {
+  const { workspace, config, dot } = setup();
   try {
-    const fetchMock = vi.fn(async (_url: URL, init?: RequestInit) => {
+    workspace.bindThread('thread-decline', dot.id, 'Decline');
+    const fetchMock = vi.fn(async (url: URL, init?: RequestInit) => {
+      if (url.pathname.endsWith('/thread-status'))
+        return Response.json({
+          ok: true,
+          snapshot: {
+            bridge: 'supervisor-agui',
+            supervisorRunId: 'sv-decline',
+            running: true,
+          },
+        });
+      expect(url.toString()).toBe('http://127.0.0.1:8791/approval');
       expect(JSON.parse(String(init?.body))).toEqual({
         supervisorRunId: 'sv-decline',
         decision: 'decline',
@@ -76,6 +101,7 @@ it('proxies writer decline to the configured bridge', async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        threadId: 'thread-decline',
         supervisorRunId: 'sv-decline',
         decision: 'decline',
       }),
@@ -84,7 +110,7 @@ it('proxies writer decline to the configured bridge', async () => {
     expect(await response.json()).toMatchObject({
       approval: { status: 'declined', decision: 'decline' },
     });
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   } finally {
     workspace.close();
   }
@@ -108,10 +134,20 @@ it('rejects malformed approval before contacting the bridge', async () => {
   }
 });
 
-it('projects evidence into one stable Space page per Supervisor run', async () => {
+it('projects evidence only for the run bound to the Supervisor thread', async () => {
   const { workspace, config, dot } = setup();
   try {
+    workspace.bindThread('thread-evidence', dot.id, 'Evidence');
     const fetchMock = vi.fn(async (url: URL, init?: RequestInit) => {
+      if (url.pathname.endsWith('/thread-status'))
+        return Response.json({
+          ok: true,
+          snapshot: {
+            bridge: 'supervisor-agui',
+            supervisorRunId: 'sv-1',
+            running: false,
+          },
+        });
       expect(url.toString()).toBe('http://127.0.0.1:8791/evidence');
       expect(JSON.parse(String(init?.body))).toEqual({
         supervisorRunId: 'sv-1',
@@ -143,7 +179,10 @@ it('projects evidence into one stable Space page per Supervisor run', async () =
       const response = await app.request('/supervisor/evidence', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ supervisorRunId: 'sv-1' }),
+        body: JSON.stringify({
+          threadId: 'thread-evidence',
+          supervisorRunId: 'sv-1',
+        }),
       });
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({
@@ -164,7 +203,7 @@ it('projects evidence into one stable Space page per Supervisor run', async () =
     expect(pages[0].content).toContain('EV-0001');
     expect(pages[0].content).toContain('trust: mechanical');
     expect(workspace.dot(dot.id)?.spaceIds).toContain(spaces[0].id);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   } finally {
     workspace.close();
   }
@@ -261,10 +300,20 @@ it('rejects malformed Supervisor thread status requests locally', async () => {
   }
 });
 
-it('proxies run-scoped cancel to the configured bridge', async () => {
-  const { workspace, config } = setup();
+it('proxies cancel only after thread/run scope validation', async () => {
+  const { workspace, config, dot } = setup();
   try {
+    workspace.bindThread('thread-cancel', dot.id, 'Cancel');
     const fetchMock = vi.fn(async (url: URL, init?: RequestInit) => {
+      if (url.pathname.endsWith('/thread-status'))
+        return Response.json({
+          ok: true,
+          snapshot: {
+            bridge: 'supervisor-agui',
+            supervisorRunId: 'sv-1',
+            running: true,
+          },
+        });
       expect(url.toString()).toBe('http://127.0.0.1:8791/cancel');
       expect(JSON.parse(String(init?.body))).toEqual({
         supervisorRunId: 'sv-1',
@@ -282,6 +331,7 @@ it('proxies run-scoped cancel to the configured bridge', async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        threadId: 'thread-cancel',
         supervisorRunId: 'sv-1',
         supervisorPid: 123,
       }),
@@ -291,7 +341,7 @@ it('proxies run-scoped cancel to the configured bridge', async () => {
       ok: true,
       supervisorRunId: 'sv-1',
     });
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   } finally {
     workspace.close();
   }
@@ -310,6 +360,42 @@ it('rejects malformed cancel before contacting the bridge', async () => {
     });
     expect(response.status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();
+  } finally {
+    workspace.close();
+  }
+});
+
+it('rejects actions when the requested run is not bound to the thread', async () => {
+  const { workspace, config, dot } = setup();
+  try {
+    workspace.bindThread('thread-mismatch', dot.id, 'Mismatch');
+    const fetchMock = vi.fn(async (url: URL) => {
+      expect(url.pathname).toBe('/thread-status');
+      return Response.json({
+        ok: true,
+        snapshot: {
+          bridge: 'supervisor-agui',
+          supervisorRunId: 'sv-actual',
+          running: true,
+        },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const app = supervisorRoutes(config, workspace);
+    const response = await app.request('/supervisor/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        threadId: 'thread-mismatch',
+        supervisorRunId: 'sv-other',
+        supervisorPid: 999,
+      }),
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: 'Supervisor run does not belong to this conversation.',
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
   } finally {
     workspace.close();
   }
