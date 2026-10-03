@@ -207,6 +207,27 @@ it('renders failed recovered runs as failed', () => {
   expect(html).not.toContain('>Finished<');
 });
 
+it('renders reserved Supervisor turns as starting without Stop run', () => {
+  const state = {
+    bridge: 'supervisor-agui',
+    bridgeRunId: 'bridge-starting',
+    supervisorRunId: '',
+    supervisorPid: 0,
+    running: true,
+    cancelled: false,
+    cancelledAt: '',
+    recoveryState: 'starting',
+    bindingStatus: 'reserving',
+    activeCount: 0,
+    capacity: 3,
+    eventCounts: {},
+    workers: [],
+  };
+  const html = renderToStaticMarkup(<SupervisorRunPanel state={state} />);
+  expect(html).toContain('Starting…');
+  expect(html).not.toContain('Stop run');
+});
+
 it('shows uncertain recovery without exposing Stop run', () => {
   const state = {
     bridge: 'supervisor-agui',
