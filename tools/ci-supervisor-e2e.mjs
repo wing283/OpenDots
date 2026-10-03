@@ -204,6 +204,28 @@ try {
   if (!messages.some((message) => String(message.content || '').includes('ci-mock-ok')))
     throw new Error(`Assistant result missing: ${JSON.stringify(messages)}`);
 
+  const restoredResponse = await fetch(
+    `http://127.0.0.1:${appPort}/api/supervisor/thread-status`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ threadId: conversation.id }),
+    },
+  );
+  if (!restoredResponse.ok)
+    throw new Error(
+      `Supervisor thread restore failed: ${restoredResponse.status} ${await restoredResponse.text()}`,
+    );
+  const restoredThread = await restoredResponse.json();
+  if (restoredThread.snapshot?.supervisorRunId !== 'ci-supervisor-run')
+    throw new Error(
+      `Restored Supervisor run id mismatch: ${JSON.stringify(restoredThread)}`,
+    );
+  if (restoredThread.snapshot?.running !== false)
+    throw new Error(
+      `Restored Supervisor terminal snapshot was not stopped: ${JSON.stringify(restoredThread)}`,
+    );
+
   const planCacheSoak = await runSoakMode(
     'plan-cache-small',
     dotId,
@@ -251,6 +273,12 @@ try {
         })),
         customEvents: custom.map((event) => event.name),
         assistantMessages: messages.length,
+        restoredThread: {
+          bindingStatus: restoredThread.bindingStatus,
+          correlationState: restoredThread.correlationState,
+          supervisorRunId: restoredThread.snapshot?.supervisorRunId,
+          running: restoredThread.snapshot?.running,
+        },
         planCacheSmallVerdict: planCacheSoak.planCacheSmallVerdict,
         dagCacheVerdict: dagCacheSoak.dagCacheVerdict,
         writerApprovalVerdict: writerSoak.writerApprovalVerdict,
