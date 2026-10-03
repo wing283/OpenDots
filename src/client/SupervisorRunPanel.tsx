@@ -291,14 +291,14 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
           {snapshot.running &&
             snapshot.recoveryState !== 'uncertain' &&
             snapshot.supervisorRunId && (
-            <button
-              type="button"
-              disabled={cancelBusy}
-              onClick={() => void cancelRun()}
-            >
-              {cancelBusy ? 'Stopping…' : 'Stop run'}
-            </button>
-          )}
+              <button
+                type="button"
+                disabled={cancelBusy}
+                onClick={() => void cancelRun()}
+              >
+                {cancelBusy ? 'Stopping…' : 'Stop run'}
+              </button>
+            )}
         </div>
       </div>
       {cancelError && <p className="supervisor-run-error">{cancelError}</p>}
