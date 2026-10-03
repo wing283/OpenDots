@@ -50,6 +50,27 @@ async function runCaptured(command, args, env = {}) {
   return { code, stdout, stderr };
 }
 
+async function runSoakMode(mode, dotId, appPort, workspacePath = '') {
+  const args = [
+    'tools/soak-supervisor-integration.mjs',
+    '--base',
+    `http://127.0.0.1:${appPort}`,
+    '--runtime',
+    `http://127.0.0.1:${appPort}/api/copilotkit`,
+    '--agent-id',
+    dotId,
+    '--mode',
+    mode,
+  ];
+  if (workspacePath) args.push('--workspace', workspacePath);
+  const processResult = await runCaptured(process.execPath, args);
+  if (processResult.code !== 0)
+    throw new Error(
+      `${mode} soak process failed with ${processResult.code}: ${processResult.stderr}`,
+    );
+  return JSON.parse(processResult.stdout.trim());
+}
+
 async function waitFor(url, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
   let lastError;
@@ -81,6 +102,7 @@ let subscription;
 try {
   start(process.execPath, ['tools/mock-supervisor-agui.mjs'], {
     MOCK_SUPERVISOR_PORT: String(mockPort),
+    MOCK_SUPERVISOR_WORKSPACE: root,
   });
   await waitFor(`http://127.0.0.1:${mockPort}/health`);
 
@@ -182,25 +204,31 @@ try {
   if (!messages.some((message) => String(message.content || '').includes('ci-mock-ok')))
     throw new Error(`Assistant result missing: ${JSON.stringify(messages)}`);
 
-  const soakProcess = await runCaptured(process.execPath, [
-    'tools/soak-supervisor-integration.mjs',
-    '--base',
-    `http://127.0.0.1:${appPort}`,
-    '--runtime',
-    `http://127.0.0.1:${appPort}/api/copilotkit`,
-    '--agent-id',
-    dotId,
-    '--mode',
+  const planCacheSoak = await runSoakMode(
     'plan-cache-small',
-  ]);
-  if (soakProcess.code !== 0)
+    dotId,
+    appPort,
+  );
+  if (planCacheSoak.planCacheSmallVerdict?.pass !== true)
     throw new Error(
-      `Plan-cache soak process failed with ${soakProcess.code}: ${soakProcess.stderr}`,
+      `Plan-cache soak verdict failed: ${JSON.stringify(planCacheSoak.planCacheSmallVerdict)}`,
     );
-  const soak = JSON.parse(soakProcess.stdout.trim());
-  if (soak.planCacheSmallVerdict?.pass !== true)
+
+  const writerSoak = await runSoakMode(
+    'writer-approval',
+    dotId,
+    appPort,
+    root,
+  );
+  if (writerSoak.writerApprovalVerdict?.pass !== true)
     throw new Error(
-      `Plan-cache soak verdict failed: ${JSON.stringify(soak.planCacheSmallVerdict)}`,
+      `Writer approval soak verdict failed: ${JSON.stringify(writerSoak.writerApprovalVerdict)}`,
+    );
+
+  const cancelSoak = await runSoakMode('cancel', dotId, appPort);
+  if (cancelSoak.cancelVerdict?.pass !== true)
+    throw new Error(
+      `Cancel soak verdict failed: ${JSON.stringify(cancelSoak.cancelVerdict)}`,
     );
 
   console.log(
@@ -217,7 +245,9 @@ try {
         })),
         customEvents: custom.map((event) => event.name),
         assistantMessages: messages.length,
-        planCacheSmallVerdict: soak.planCacheSmallVerdict,
+        planCacheSmallVerdict: planCacheSoak.planCacheSmallVerdict,
+        writerApprovalVerdict: writerSoak.writerApprovalVerdict,
+        cancelVerdict: cancelSoak.cancelVerdict,
       },
       null,
       2,
