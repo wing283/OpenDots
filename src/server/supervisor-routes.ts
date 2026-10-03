@@ -32,6 +32,15 @@ const approval = z
   })
   .strict();
 
+const messageWrite = z
+  .object({
+    threadId: z.string().trim().min(1).max(512),
+    id: z.string().trim().min(1).max(512),
+    role: z.enum(['user', 'assistant']),
+    content: z.string().min(1).max(200000),
+  })
+  .strict();
+
 const evidenceEnvelope = z.object({
   ok: z.literal(true),
   evidence: z.object({
@@ -264,6 +273,53 @@ export function supervisorRoutes(
       error: 'Supervisor bridge returned an unreadable response.',
     }))) as Record<string, unknown>;
     return c.json(body, response.status as 200 | 400 | 404 | 409 | 500);
+  });
+
+  app.post('/supervisor/messages/list', async (c) => {
+    if (!config.supervisorDotId)
+      return c.json(
+        { error: 'Supervisor integration is not configured.' },
+        404,
+      );
+    const parsed = threadRef.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ error: 'Invalid Supervisor message request.' }, 400);
+    try {
+      workspace.requireThread(parsed.data.threadId, config.supervisorDotId);
+      return c.json({
+        ok: true,
+        messages: workspace.supervisorMessages(parsed.data.threadId),
+      });
+    } catch {
+      return c.json(
+        { error: 'Supervisor thread does not belong to this Dot.' },
+        404,
+      );
+    }
+  });
+
+  app.post('/supervisor/messages', async (c) => {
+    if (!config.supervisorDotId)
+      return c.json(
+        { error: 'Supervisor integration is not configured.' },
+        404,
+      );
+    const parsed = messageWrite.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ error: 'Invalid Supervisor message.' }, 400);
+    try {
+      workspace.requireThread(parsed.data.threadId, config.supervisorDotId);
+      const message = workspace.appendSupervisorMessage(
+        parsed.data.threadId,
+        parsed.data,
+      );
+      return c.json({ ok: true, message });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Supervisor message failed.';
+      const status = message.includes('already bound') ? 409 : 404;
+      return c.json({ error: message }, status);
+    }
   });
 
   app.post('/supervisor/cancel', async (c) => {
