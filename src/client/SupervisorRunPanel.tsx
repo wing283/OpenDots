@@ -291,11 +291,17 @@ export function SupervisorRunPanel({
               : snapshot.bindingStatus === 'declined' ||
                   snapshot.recoveryState === 'declined'
                 ? 'Declined'
-                : snapshot.running
-                  ? 'Running'
-                  : snapshot.cancelled
-                    ? 'Cancelled'
-                    : 'Finished'}
+                : snapshot.bindingStatus === 'failed' ||
+                    snapshot.recoveryState === 'failed'
+                  ? 'Failed'
+                  : snapshot.bindingStatus === 'stale' ||
+                      snapshot.recoveryState === 'stale'
+                    ? 'Interrupted'
+                    : snapshot.running
+                      ? 'Running'
+                      : snapshot.cancelled
+                        ? 'Cancelled'
+                        : 'Finished'}
           </span>
         </div>
         <div className="supervisor-run-heading-actions">
