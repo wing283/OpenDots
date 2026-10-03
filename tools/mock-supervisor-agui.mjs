@@ -262,11 +262,41 @@ const server = http.createServer(async (req, res) => {
       () => approvals.get(supervisorRunId)?.status !== 'pending',
     );
     const approval = approvals.get(supervisorRunId);
-    if (!resolved || !approval || approval.status !== 'approved') {
+    if (!resolved || !approval) {
       writeSse(res, {
         type: 'RUN_ERROR',
         code: 'SUPERVISOR_APPROVAL_FAILED',
-        message: 'Mock writer approval was not approved.',
+        message: 'Mock writer approval was not resolved.',
+      });
+      approvals.delete(supervisorRunId);
+      res.end();
+      return;
+    }
+
+    if (approval.status === 'declined') {
+      writeSse(
+        res,
+        custom('sv.approval.resolved', 'writer', {
+          run_id: supervisorRunId,
+          status: 'declined',
+        }),
+      );
+      const declinedFinal = snapshot({
+        bridgeRunId: runId,
+        supervisorRunId,
+        running: false,
+        approval: { status: 'declined', decision: 'decline' },
+        workers: [writer],
+      });
+      declinedFinal.snapshot.bindingStatus = 'declined';
+      declinedFinal.snapshot.recoveryState = 'declined';
+      threadSnapshots.set(threadId, declinedFinal.snapshot);
+      writeSse(res, declinedFinal);
+      writeSse(res, {
+        type: 'RUN_ERROR',
+        code: 'SUPERVISOR_APPROVAL_DECLINED',
+        message:
+          'OpenDots writer approval was declined; no writer DAG execution was started.',
       });
       approvals.delete(supervisorRunId);
       res.end();
