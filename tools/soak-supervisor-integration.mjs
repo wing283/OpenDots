@@ -428,6 +428,85 @@ if (mode === 'all' || mode === 'writer-approval') {
   };
 }
 
+if (mode === 'all' || mode === 'writer-decline') {
+  if (!workspace) throw new Error('--workspace is required for writer-decline');
+  const marker = join(workspace, 'OPENDOTS_SOAK_WRITER_MARKER.txt');
+  await rm(marker, { force: true });
+
+  let declineSent = false;
+  let declineResponse = null;
+  const state = { workers: 1, maxParallel: 1, verify: false, synthesize: false };
+  const prompt = [
+    'Create exactly one worker. It must be mode=writer and complexity=light.',
+    'This is an isolated validation worktree. Modify exactly one file and no others:',
+    'OPENDOTS_SOAK_WRITER_MARKER.txt in the current working directory.',
+    'The complete file content must be exactly: OPENDOTS_WRITER_APPROVED',
+    'Do not run network actions, do not modify git configuration, do not commit, and do not touch any other file.',
+  ].join('\n');
+
+  const result = await runOne({
+    base,
+    runtime,
+    dotId,
+    title: 'Writer decline soak',
+    prompt,
+    state,
+    onSnapshot: async (snapshot) => {
+      if (
+        declineSent ||
+        !snapshot.supervisorRunId ||
+        snapshot.approval?.status !== 'pending'
+      )
+        return;
+      declineSent = true;
+      declineResponse = await json(`${base}/api/supervisor/approval`, {
+        method: 'POST',
+        body: JSON.stringify({
+          supervisorRunId: snapshot.supervisorRunId,
+          decision: 'decline',
+        }),
+      });
+    },
+  });
+
+  let markerExists = false;
+  try {
+    await stat(marker);
+    markerExists = true;
+  } catch {}
+  await rm(marker, { force: true });
+
+  const finalApprovalStatus = String(result.approval?.status || '');
+  const runErrorCode = String(result.runError?.code || '');
+  results.writerDecline = {
+    ...result,
+    declineSent,
+    declineResponse,
+    markerExists,
+  };
+  results.writerDeclineVerdict = {
+    pass:
+      declineSent &&
+      declineResponse?.ok === true &&
+      declineResponse?.approval?.status === 'declined' &&
+      markerExists === false &&
+      result.approvalRequired >= 1 &&
+      result.approvalResolved >= 1 &&
+      finalApprovalStatus === 'declined' &&
+      result.terminalRunning === false &&
+      runErrorCode === 'SUPERVISOR_APPROVAL_DECLINED',
+    declineSent,
+    declineAccepted: declineResponse?.ok === true,
+    responseApprovalStatus: declineResponse?.approval?.status || '',
+    approvalRequiredEvents: result.approvalRequired,
+    approvalResolvedEvents: result.approvalResolved,
+    finalApprovalStatus,
+    markerAbsent: markerExists === false,
+    terminalStopped: result.terminalRunning === false,
+    runErrorCode,
+  };
+}
+
 if (mode === 'all' || mode === 'cancel') {
   let cancelSent = false;
   let cancelResponse = null;
