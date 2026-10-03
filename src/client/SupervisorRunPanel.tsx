@@ -163,7 +163,13 @@ export function dagLayers(workers: Worker[]): Worker[][] {
   ).filter((layer) => layer.length > 0);
 }
 
-export function SupervisorRunPanel({ state }: { state: unknown }) {
+export function SupervisorRunPanel({
+  state,
+  threadId,
+}: {
+  state: unknown;
+  threadId?: string;
+}) {
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [approvalError, setApprovalError] = useState('');
   const [cancelBusy, setCancelBusy] = useState(false);
@@ -216,6 +222,7 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
         space: { id: string };
         page: { id: string; spaceId: string };
       }>('/supervisor/evidence', 'POST', {
+        threadId,
         supervisorRunId: snapshot.supervisorRunId,
       });
       setSavedEvidence({
@@ -238,6 +245,7 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
     try {
       const { api } = await import('./api');
       await api('/supervisor/approval', 'POST', {
+        threadId,
         supervisorRunId: snapshot.supervisorRunId,
         decision,
       });
@@ -257,6 +265,7 @@ export function SupervisorRunPanel({ state }: { state: unknown }) {
     try {
       const { api } = await import('./api');
       await api('/supervisor/cancel', 'POST', {
+        threadId,
         supervisorRunId: snapshot.supervisorRunId,
         ...(snapshot.supervisorPid > 0
           ? { supervisorPid: snapshot.supervisorPid }
