@@ -226,6 +226,109 @@ try {
       `Restored Supervisor terminal snapshot was not stopped: ${JSON.stringify(restoredThread)}`,
     );
 
+  const recoveryConversationResponse = await fetch(
+    `http://127.0.0.1:${appPort}/api/conversations`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        dotId,
+        title: 'CI Supervisor active recovery',
+      }),
+    },
+  );
+  if (!recoveryConversationResponse.ok)
+    throw new Error(
+      `Recovery conversation creation failed: ${recoveryConversationResponse.status} ${await recoveryConversationResponse.text()}`,
+    );
+  const recoveryConversation = await recoveryConversationResponse.json();
+  const recoveryAgent = new ProxiedCopilotRuntimeAgent({
+    runtimeUrl: `http://127.0.0.1:${appPort}/api/copilotkit`,
+    agentId: `ci-recovery-${randomUUID()}`,
+    runtimeAgentId: dotId,
+  });
+  recoveryAgent.threadId = recoveryConversation.id;
+  recoveryAgent.addMessage({
+    id: randomUUID(),
+    role: 'user',
+    content: 'CI Supervisor recovery hold',
+  });
+  const recoveryRun = recoveryAgent.runAgent();
+
+  let activeRestore = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const response = await fetch(
+      `http://127.0.0.1:${appPort}/api/supervisor/thread-status`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ threadId: recoveryConversation.id }),
+      },
+    );
+    if (response.ok) {
+      const body = await response.json();
+      if (body.snapshot?.running === true) {
+        activeRestore = body;
+        break;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  if (!activeRestore)
+    throw new Error('Active Supervisor recovery snapshot was not observed.');
+  if (
+    activeRestore.bindingStatus !== 'active' ||
+    activeRestore.correlationState !== 'matched' ||
+    activeRestore.snapshot?.supervisorRunId !== 'ci-recovery-active-run'
+  )
+    throw new Error(
+      `Active recovery mismatch: ${JSON.stringify(activeRestore)}`,
+    );
+
+  const releaseResponse = await fetch(
+    `http://127.0.0.1:${mockPort}/ci/release-recovery`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ threadId: recoveryConversation.id }),
+    },
+  );
+  if (!releaseResponse.ok)
+    throw new Error(
+      `Recovery release failed: ${releaseResponse.status} ${await releaseResponse.text()}`,
+    );
+  const recoveryResult = await recoveryRun;
+  if (
+    !recoveryResult.newMessages?.some((message) =>
+      String(message.content || '').includes('ci-recovery-ok'),
+    )
+  )
+    throw new Error(
+      `Recovery completion message missing: ${JSON.stringify(recoveryResult.newMessages)}`,
+    );
+
+  const terminalRecoveryResponse = await fetch(
+    `http://127.0.0.1:${appPort}/api/supervisor/thread-status`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ threadId: recoveryConversation.id }),
+    },
+  );
+  if (!terminalRecoveryResponse.ok)
+    throw new Error(
+      `Terminal recovery lookup failed: ${terminalRecoveryResponse.status} ${await terminalRecoveryResponse.text()}`,
+    );
+  const terminalRecovery = await terminalRecoveryResponse.json();
+  if (
+    terminalRecovery.snapshot?.running !== false ||
+    terminalRecovery.bindingStatus !== 'finished'
+  )
+    throw new Error(
+      `Terminal recovery mismatch: ${JSON.stringify(terminalRecovery)}`,
+    );
+  await recoveryAgent.detachActiveRun().catch(() => {});
+
   const planCacheSoak = await runSoakMode(
     'plan-cache-small',
     dotId,
@@ -313,6 +416,18 @@ try {
           correlationState: restoredThread.correlationState,
           supervisorRunId: restoredThread.snapshot?.supervisorRunId,
           running: restoredThread.snapshot?.running,
+        },
+        activeRecovery: {
+          bindingStatus: activeRestore.bindingStatus,
+          correlationState: activeRestore.correlationState,
+          supervisorRunId: activeRestore.snapshot?.supervisorRunId,
+          running: activeRestore.snapshot?.running,
+        },
+        terminalRecovery: {
+          bindingStatus: terminalRecovery.bindingStatus,
+          correlationState: terminalRecovery.correlationState,
+          supervisorRunId: terminalRecovery.snapshot?.supervisorRunId,
+          running: terminalRecovery.snapshot?.running,
         },
         planCacheSmallVerdict: planCacheSoak.planCacheSmallVerdict,
         dagCacheVerdict: dagCacheSoak.dagCacheVerdict,
