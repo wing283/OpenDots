@@ -26,4 +26,6 @@ jobs:
       - run: node --check tools/benchmark-supervisor-transport.mjs
       - run: node --check tools/benchmark-supervisor-live.mjs
       - run: node --check tools/soak-supervisor-integration.mjs
+      - name: Run full local Supervisor mock E2E
+        run: node --import tsx tools/ci-supervisor-e2e.mjs
       - run: npm run build
