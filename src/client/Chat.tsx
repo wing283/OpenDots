@@ -32,6 +32,7 @@ import { useVoice } from './useVoice';
 import { CallView } from './CallView';
 import { SupervisorRunPanel, supervisorSnapshot } from './SupervisorRunPanel';
 import { SupervisorHealthStatus } from './SupervisorHealthStatus';
+import { recoveredSupervisorMessage } from './supervisor-recovery';
 export function Chat({
   thread,
   dot,
@@ -243,6 +244,7 @@ export function Chat({
       try {
         const result = await api<{
           snapshot?: unknown;
+          finalMessage?: unknown;
         }>(
           '/supervisor/thread-status',
           'POST',
@@ -256,6 +258,13 @@ export function Chat({
 
         agent.setState(restored);
         setRunning(restored.running);
+        if (!restored.running) {
+          const recovered = recoveredSupervisorMessage(
+            result.finalMessage,
+            agent.messages.map((message) => message.id),
+          );
+          if (recovered) agent.addMessage(recovered);
+        }
         setError('');
         setSupervisorRecoveryReady(true);
         if (restored.running) scheduleRefresh();
