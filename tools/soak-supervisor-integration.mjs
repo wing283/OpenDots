@@ -53,6 +53,9 @@ function summarizeCustomEvents(customEvents) {
     cacheBypasses: count('sv.cache.bypass'),
     approvalRequired: count('sv.approval.required'),
     approvalResolved: count('sv.approval.resolved'),
+    planCacheHits: count('sv.plan.cache.hit'),
+    planCacheMisses: count('sv.plan.cache.miss'),
+    planCacheStores: count('sv.plan.cache.store'),
   };
 }
 
@@ -231,6 +234,40 @@ if (mode === 'plan-cache-small') {
     prompt,
     state,
   });
+
+  const expectedIds = ['calc_small', 'format_small'];
+  const firstIds = (results.planCacheSmallFirst.workers || [])
+    .map((worker) => worker.id)
+    .filter(Boolean)
+    .sort();
+  const secondIds = (results.planCacheSmallSecond.workers || [])
+    .map((worker) => worker.id)
+    .filter(Boolean)
+    .sort();
+  const stableWorkers =
+    JSON.stringify(firstIds) === JSON.stringify([...expectedIds].sort()) &&
+    JSON.stringify(secondIds) === JSON.stringify([...expectedIds].sort());
+
+  results.planCacheSmallVerdict = {
+    pass:
+      !results.planCacheSmallFirst.runError &&
+      !results.planCacheSmallSecond.runError &&
+      results.planCacheSmallFirst.planCacheMisses >= 1 &&
+      results.planCacheSmallFirst.planCacheStores >= 1 &&
+      results.planCacheSmallSecond.planCacheHits >= 1 &&
+      results.planCacheSmallSecond.cacheHits >= expectedIds.length &&
+      stableWorkers,
+    firstRunCompleted: !results.planCacheSmallFirst.runError,
+    secondRunCompleted: !results.planCacheSmallSecond.runError,
+    firstPlanCacheMisses: results.planCacheSmallFirst.planCacheMisses,
+    firstPlanCacheStores: results.planCacheSmallFirst.planCacheStores,
+    secondPlanCacheHits: results.planCacheSmallSecond.planCacheHits,
+    secondResultCacheHits: results.planCacheSmallSecond.cacheHits,
+    expectedResultCacheHits: expectedIds.length,
+    stableWorkers,
+    firstWorkerIds: firstIds,
+    secondWorkerIds: secondIds,
+  };
 }
 
 if (mode === 'all' || mode === 'dag-cache') {
