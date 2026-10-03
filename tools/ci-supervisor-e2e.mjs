@@ -32,6 +32,24 @@ function start(command, args, env = {}) {
   return child;
 }
 
+async function runCaptured(command, args, env = {}) {
+  const child = spawn(command, args, {
+    cwd: process.cwd(),
+    env: { ...process.env, ...env },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk.toString();
+  });
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk.toString();
+  });
+  const code = await new Promise((resolve) => child.once('exit', resolve));
+  return { code, stdout, stderr };
+}
+
 async function waitFor(url, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
   let lastError;
@@ -164,6 +182,27 @@ try {
   if (!messages.some((message) => String(message.content || '').includes('ci-mock-ok')))
     throw new Error(`Assistant result missing: ${JSON.stringify(messages)}`);
 
+  const soakProcess = await runCaptured(process.execPath, [
+    'tools/soak-supervisor-integration.mjs',
+    '--base',
+    `http://127.0.0.1:${appPort}`,
+    '--runtime',
+    `http://127.0.0.1:${appPort}/api/copilotkit`,
+    '--agent-id',
+    dotId,
+    '--mode',
+    'plan-cache-small',
+  ]);
+  if (soakProcess.code !== 0)
+    throw new Error(
+      `Plan-cache soak process failed with ${soakProcess.code}: ${soakProcess.stderr}`,
+    );
+  const soak = JSON.parse(soakProcess.stdout.trim());
+  if (soak.planCacheSmallVerdict?.pass !== true)
+    throw new Error(
+      `Plan-cache soak verdict failed: ${JSON.stringify(soak.planCacheSmallVerdict)}`,
+    );
+
   console.log(
     JSON.stringify(
       {
@@ -178,6 +217,7 @@ try {
         })),
         customEvents: custom.map((event) => event.name),
         assistantMessages: messages.length,
+        planCacheSmallVerdict: soak.planCacheSmallVerdict,
       },
       null,
       2,
