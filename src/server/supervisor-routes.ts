@@ -188,6 +188,15 @@ export function supervisorRoutes(
     if (!parsed.success)
       return c.json({ error: 'Invalid Supervisor thread request.' }, 400);
 
+    try {
+      workspace.requireThread(parsed.data.threadId, config.supervisorDotId);
+    } catch {
+      return c.json(
+        { error: 'Supervisor thread does not belong to this Dot.' },
+        404,
+      );
+    }
+
     const response = await bridgePost(
       config,
       '/thread-status',
