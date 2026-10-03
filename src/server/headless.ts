@@ -3,6 +3,7 @@ import type { Message } from '@ag-ui/core';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { voiceReceiptMessagePrefix } from '../shared/voice-receipt.js';
+import { SupervisorHttpAgent } from './agent-factory.js';
 
 export function currentTurnText(messages: Message[], error?: Error): string {
   if (error) throw error;
@@ -69,6 +70,55 @@ export async function runThreadTurn(
     const result = await agent.runAgent();
     signal.throwIfAborted();
     return currentTurnText(result.newMessages, runError);
+  } finally {
+    signal.removeEventListener('abort', stop);
+    subscription.unsubscribe();
+    await agent.detachActiveRun();
+  }
+}
+
+
+export async function runSupervisorThreadTurn(
+  url: string,
+  token: string | undefined,
+  dotId: string,
+  threadId: string,
+  messages: Array<{
+    id: string;
+    role: 'user' | 'assistant';
+    content: string;
+  }>,
+  signal: AbortSignal,
+  transport: typeof fetch = fetch,
+): Promise<{ text: string; supervisorRunId: string }> {
+  signal.throwIfAborted();
+  const agent = new SupervisorHttpAgent({
+    agentId: dotId,
+    url,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    fetch: transport,
+  });
+  agent.threadId = threadId;
+  for (const message of messages) agent.addMessage(message);
+
+  let runError: Error | undefined;
+  const subscription = agent.subscribe({
+    onRunErrorEvent: ({ event }) => {
+      runError = new Error(event.message);
+    },
+  });
+  const stop = () => agent.abortRun();
+  signal.addEventListener('abort', stop, { once: true });
+  try {
+    signal.throwIfAborted();
+    const result = await agent.runAgent();
+    signal.throwIfAborted();
+    const text = currentTurnText(result.newMessages, runError);
+    const state = agent.state as Record<string, unknown>;
+    return {
+      text,
+      supervisorRunId: String(state.supervisorRunId ?? ''),
+    };
   } finally {
     signal.removeEventListener('abort', stop);
     subscription.unsubscribe();
