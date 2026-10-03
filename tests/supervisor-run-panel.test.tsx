@@ -73,7 +73,9 @@ it('renders Supervisor DAG state, costs, cache and dependencies', () => {
   expect(html).toContain('critical');
 });
 
-it('prefers measured TOKEN_COST_REPORT metrics over worker placeholders', () => {
+it(
+  'prefers measured TOKEN_COST_REPORT metrics over worker placeholders',
+  () => {
   const state = {
     bridge: 'supervisor-agui',
     bridgeRunId: 'bridge-cost',
@@ -116,10 +118,13 @@ it('prefers measured TOKEN_COST_REPORT metrics over worker placeholders', () => 
   expect(html).toContain('$0.0058');
   expect(html).toContain('baseline $0.0100');
   expect(html).toContain('saved');
-  expect(html).toContain('42.0%');
-});
+    expect(html).toContain('42.0%');
+  },
+);
 
-it('renders cancelled Supervisor runs distinctly from normal completion', () => {
+it(
+  'renders cancelled Supervisor runs distinctly from normal completion',
+  () => {
   const state = {
     bridge: 'supervisor-agui',
     bridgeRunId: 'bridge-cancel',
@@ -135,8 +140,9 @@ it('renders cancelled Supervisor runs distinctly from normal completion', () => 
   };
   const html = renderToStaticMarkup(<SupervisorRunPanel state={state} />);
   expect(html).toContain('Cancelled');
-  expect(html).not.toContain('>Finished<');
-});
+    expect(html).not.toContain('>Finished<');
+  },
+);
 
 it('groups workers into dependency layers', () => {
   const workers = [
