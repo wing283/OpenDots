@@ -1,7 +1,7 @@
 import { PageReviewCard } from './PageReviewCard';
 import { pageReviewSchema, pageReviewTool } from '../shared/page-review';
 import { contextualMessage, type PageContext } from './page-context';
-import { api } from './api';
+import { api, ApiError } from './api';
 import type { Page } from '../server/pages';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -96,6 +96,9 @@ export function Chat({
   const [error, setError] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [running, setRunning] = useState(false);
+  const [supervisorRecoveryReady, setSupervisorRecoveryReady] = useState(
+    !supervisor,
+  );
   const voice = useVoice(thread.id, onSaved, agent.messages.at(-1)?.id);
   const sent = useRef(false);
   const cancelled = useRef(false);
@@ -144,7 +147,15 @@ export function Chat({
     };
   }, [agent, copilotkit, isReady]);
   const send = async (text: string) => {
-    if (!text.trim() || running || !loaded || !contextReady || paused) return;
+    if (
+      !text.trim() ||
+      running ||
+      !loaded ||
+      !contextReady ||
+      paused ||
+      (supervisor && !supervisorRecoveryReady)
+    )
+      return;
     setError('');
     cancelled.current = false;
     declined.current = false;
@@ -211,10 +222,24 @@ export function Chat({
   };
 
   useEffect(() => {
-    if (!supervisor || !loaded) return;
+    if (!supervisor) {
+      setSupervisorRecoveryReady(true);
+      return;
+    }
+    if (!loaded) {
+      setSupervisorRecoveryReady(false);
+      return;
+    }
 
     let active = true;
     let timer: number | undefined;
+    let trackingActiveRun = false;
+    setSupervisorRecoveryReady(false);
+
+    const scheduleRefresh = () => {
+      if (!active) return;
+      timer = window.setTimeout(() => void refreshSupervisorThread(), 1000);
+    };
 
     const refreshSupervisorThread = async () => {
       try {
@@ -233,13 +258,25 @@ export function Chat({
 
         agent.setState(restored);
         setRunning(restored.running);
+        setSupervisorRecoveryReady(true);
+        trackingActiveRun = restored.running;
 
-        if (restored.running) {
-          timer = window.setTimeout(() => void refreshSupervisorThread(), 1000);
+        if (restored.running) scheduleRefresh();
+      } catch (error) {
+        if (!active) return;
+        if (error instanceof ApiError && error.status === 404) {
+          // No prior binding is the normal case for a fresh Supervisor thread.
+          setSupervisorRecoveryReady(true);
+          trackingActiveRun = false;
+          return;
         }
-      } catch {
-        // No prior binding is the normal case for a fresh Supervisor thread.
-        // Bridge reachability is already surfaced by SupervisorHealthStatus.
+        setSupervisorRecoveryReady(false);
+        setError(
+          error instanceof Error
+            ? `Supervisor state restore failed: ${error.message}`
+            : 'Supervisor state restore failed.',
+        );
+        if (trackingActiveRun) scheduleRefresh();
       }
     };
 
@@ -251,12 +288,26 @@ export function Chat({
   }, [agent, loaded, supervisor, thread.id]);
 
   useEffect(() => {
-    if (loaded && contextReady && !paused && initialPrompt && !sent.current) {
+    if (
+      loaded &&
+      contextReady &&
+      !paused &&
+      (!supervisor || supervisorRecoveryReady) &&
+      initialPrompt &&
+      !sent.current
+    ) {
       sent.current = true;
       onConsumed();
       void send(initialPrompt);
     }
-  }, [loaded, contextReady, paused, initialPrompt]);
+  }, [
+    loaded,
+    contextReady,
+    paused,
+    supervisor,
+    supervisorRecoveryReady,
+    initialPrompt,
+  ]);
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'instant', block: 'end' });
   }, [agent.messages.length, running]);
@@ -334,9 +385,11 @@ export function Chat({
               ? 'Paused'
               : running
                 ? 'Thinking…'
-                : loaded && contextReady
-                  ? 'Here with you'
-                  : 'Connecting to your conversation…'}
+                : supervisor && !supervisorRecoveryReady
+                  ? 'Restoring Supervisor…'
+                  : loaded && contextReady
+                    ? 'Here with you'
+                    : 'Connecting to your conversation…'}
           </span>
         </div>
         <div className="chat-persona-actions">
@@ -533,7 +586,13 @@ export function Chat({
             <button
               className="send-button"
               aria-label="Send message"
-              disabled={!draft.trim() || !loaded || !contextReady || paused}
+              disabled={
+                !draft.trim() ||
+                !loaded ||
+                !contextReady ||
+                paused ||
+                (supervisor && !supervisorRecoveryReady)
+              }
             >
               <ArrowUp size={19} />
             </button>
