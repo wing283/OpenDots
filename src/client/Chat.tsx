@@ -227,10 +227,7 @@ export function Chat({
         setRunning(restored.running);
 
         if (restored.running) {
-          timer = window.setTimeout(
-            () => void refreshSupervisorThread(),
-            1000,
-          );
+          timer = window.setTimeout(() => void refreshSupervisorThread(), 1000);
         }
       } catch {
         // No prior binding is the normal case for a fresh Supervisor thread.
