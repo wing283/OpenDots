@@ -170,6 +170,67 @@ it('projects evidence into one stable Space page per Supervisor run', async () =
   }
 });
 
+it('proxies durable Supervisor thread status', async () => {
+  const { workspace, config } = setup();
+  try {
+    const fetchMock = vi.fn(async (url: URL, init?: RequestInit) => {
+      expect(url.toString()).toBe('http://127.0.0.1:8791/thread-status');
+      expect(JSON.parse(String(init?.body))).toEqual({
+        threadId: 'thread-restore',
+      });
+      return Response.json({
+        ok: true,
+        threadId: 'thread-restore',
+        bindingStatus: 'active',
+        correlationState: 'matched',
+        snapshot: {
+          bridge: 'supervisor-agui',
+          supervisorRunId: 'sv-restore',
+          running: true,
+          workers: [],
+          eventCounts: {},
+        },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const app = supervisorRoutes(config, workspace);
+    const response = await app.request('/supervisor/thread-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ threadId: 'thread-restore' }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      bindingStatus: 'active',
+      snapshot: {
+        supervisorRunId: 'sv-restore',
+        running: true,
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  } finally {
+    workspace.close();
+  }
+});
+
+it('rejects malformed Supervisor thread status requests locally', async () => {
+  const { workspace, config } = setup();
+  try {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const app = supervisorRoutes(config, workspace);
+    const response = await app.request('/supervisor/thread-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ threadId: '' }),
+    });
+    expect(response.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  } finally {
+    workspace.close();
+  }
+});
+
 it('proxies run-scoped cancel to the configured bridge', async () => {
   const { workspace, config } = setup();
   try {
