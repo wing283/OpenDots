@@ -262,6 +262,11 @@ export function Chat({
       timer = window.setTimeout(() => void refreshSupervisorThread(), 1000);
     };
 
+    const scheduleRecovery = () => {
+      if (!active) return;
+      timer = window.setTimeout(() => void recoverSupervisorThread(), 1000);
+    };
+
     const restoreSupervisorMessages = async () => {
       const result = await api<{
         messages: Array<{
@@ -341,7 +346,7 @@ export function Chat({
       }
     };
 
-    void (async () => {
+    const recoverSupervisorThread = async () => {
       try {
         await restoreSupervisorMessages();
         await refreshSupervisorThread();
@@ -353,9 +358,11 @@ export function Chat({
             ? `Supervisor history restore failed: ${error.message}`
             : 'Supervisor history restore failed.',
         );
-        scheduleRefresh();
+        scheduleRecovery();
       }
-    })();
+    };
+
+    void recoverSupervisorThread();
     return () => {
       active = false;
       if (timer !== undefined) window.clearTimeout(timer);
