@@ -212,6 +212,31 @@ export function SupervisorRunPanel({
   const planCacheMisses = snapshot.eventCounts.PLAN_CACHE_MISS ?? 0;
   const evidence = snapshot.eventCounts.EVIDENCE_RECORDED ?? 0;
   const approvalPending = snapshot.approval?.status === 'pending';
+  let runStatusLabel = 'Finished';
+  if (
+    snapshot.recoveryState === 'starting' ||
+    snapshot.bindingStatus === 'reserving'
+  )
+    runStatusLabel = 'Starting…';
+  else if (snapshot.recoveryState === 'uncertain')
+    runStatusLabel = 'Reconnecting…';
+  else if (
+    snapshot.bindingStatus === 'declined' ||
+    snapshot.recoveryState === 'declined'
+  )
+    runStatusLabel = 'Declined';
+  else if (
+    snapshot.bindingStatus === 'failed' ||
+    snapshot.recoveryState === 'failed'
+  )
+    runStatusLabel = 'Failed';
+  else if (
+    snapshot.bindingStatus === 'stale' ||
+    snapshot.recoveryState === 'stale'
+  )
+    runStatusLabel = 'Interrupted';
+  else if (snapshot.running) runStatusLabel = 'Running';
+  else if (snapshot.cancelled) runStatusLabel = 'Cancelled';
   const saveEvidence = async () => {
     if (!snapshot.supervisorRunId || evidenceBusy || evidence <= 0) return;
     setEvidenceBusy(true);
@@ -285,27 +310,7 @@ export function SupervisorRunPanel({
       <div className="supervisor-run-heading">
         <div>
           <strong>Supervisor DAG</strong>
-          <span>
-            {snapshot.recoveryState === 'starting' ||
-            snapshot.bindingStatus === 'reserving'
-              ? 'Starting…'
-              : snapshot.recoveryState === 'uncertain'
-                ? 'Reconnecting…'
-                : snapshot.bindingStatus === 'declined' ||
-                  snapshot.recoveryState === 'declined'
-                ? 'Declined'
-                : snapshot.bindingStatus === 'failed' ||
-                    snapshot.recoveryState === 'failed'
-                  ? 'Failed'
-                  : snapshot.bindingStatus === 'stale' ||
-                      snapshot.recoveryState === 'stale'
-                    ? 'Interrupted'
-                    : snapshot.running
-                      ? 'Running'
-                      : snapshot.cancelled
-                        ? 'Cancelled'
-                        : 'Finished'}
-          </span>
+          <span>{runStatusLabel}</span>
         </div>
         <div className="supervisor-run-heading-actions">
           <code>{snapshot.supervisorRunId || 'starting…'}</code>
