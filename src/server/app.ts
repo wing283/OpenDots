@@ -109,24 +109,26 @@ export function createApp({
     if (!store.settings().researchAllowed)
       return c.json({ error: 'Research is disabled in Settings.' }, 403);
     if (platform) {
-      if (platform.setup().missing.length)
-        return c.json(
-          { error: `Setup required: ${platform.setup().missing.join(', ')}.` },
-          503,
-        );
       if (!parsed.data.threadId)
         return c.json(
           { error: 'Select a conversation for this scheduled task.' },
           400,
         );
+      let thread;
       try {
-        platform.workspace.requireThread(parsed.data.threadId);
+        thread = platform.workspace.requireThread(parsed.data.threadId);
       } catch {
         return c.json(
           { error: 'Conversation is not owned by this workspace.' },
           403,
         );
       }
+      const missing = platform.missingForDot(thread.dotId);
+      if (missing.length)
+        return c.json(
+          { error: `Setup required: ${missing.join(', ')}.` },
+          503,
+        );
     }
     const task = store.createTask(
       parsed.data.prompt,
