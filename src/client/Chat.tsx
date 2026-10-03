@@ -160,17 +160,31 @@ export function Chat({
     cancelled.current = false;
     declined.current = false;
     setRunning(true);
-    agent.addMessage({
+    const userMessage = {
       id: crypto.randomUUID(),
-      role: 'user',
+      role: 'user' as const,
       content: contextualMessage(text, pageContext),
-    });
-    setDraft('');
-    setSource('');
-    setSourceOpen(false);
+    };
     try {
+      if (supervisor)
+        await api('/supervisor/messages', 'POST', {
+          threadId: thread.id,
+          ...userMessage,
+        });
+      agent.addMessage(userMessage);
+      setDraft('');
+      setSource('');
+      setSourceOpen(false);
+
       const result = await copilotkit.runAgent({ agent });
-      if (!result.newMessages.some((message) => message.role === 'assistant')) {
+      const assistantMessages = result.newMessages.filter(
+        (message) =>
+          message.role === 'assistant' &&
+          typeof message.id === 'string' &&
+          typeof message.content === 'string' &&
+          message.content.trim(),
+      );
+      if (!assistantMessages.length) {
         if (cancelled.current || declined.current) {
           onSaved();
           return;
@@ -179,6 +193,14 @@ export function Chat({
           'The current turn returned no response. Check the runtime connection and retry.',
         );
       }
+      if (supervisor)
+        for (const message of assistantMessages)
+          await api('/supervisor/messages', 'POST', {
+            threadId: thread.id,
+            id: message.id,
+            role: 'assistant',
+            content: message.content,
+          });
       onSaved();
     } catch (e) {
       if (!cancelled.current)
@@ -240,6 +262,33 @@ export function Chat({
       timer = window.setTimeout(() => void refreshSupervisorThread(), 1000);
     };
 
+    const restoreSupervisorMessages = async () => {
+      const result = await api<{
+        messages: Array<{
+          id: string;
+          role: 'user' | 'assistant';
+          content: string;
+        }>;
+      }>(
+        '/supervisor/messages/list',
+        'POST',
+        { threadId: thread.id },
+        AbortSignal.timeout(3000),
+      );
+      if (!active) return;
+      const existing = new Set(agent.messages.map((message) => message.id));
+      for (const message of result.messages ?? []) {
+        if (!existing.has(message.id)) {
+          agent.addMessage({
+            id: message.id,
+            role: message.role,
+            content: message.content,
+          });
+          existing.add(message.id);
+        }
+      }
+    };
+
     const refreshSupervisorThread = async () => {
       try {
         const result = await api<{
@@ -263,7 +312,13 @@ export function Chat({
             result.finalMessage,
             agent.messages.map((message) => message.id),
           );
-          if (recovered) agent.addMessage(recovered);
+          if (recovered) {
+            await api('/supervisor/messages', 'POST', {
+              threadId: thread.id,
+              ...recovered,
+            });
+            agent.addMessage(recovered);
+          }
         }
         setError('');
         setSupervisorRecoveryReady(true);
@@ -286,7 +341,21 @@ export function Chat({
       }
     };
 
-    void refreshSupervisorThread();
+    void (async () => {
+      try {
+        await restoreSupervisorMessages();
+        await refreshSupervisorThread();
+      } catch (error) {
+        if (!active) return;
+        setSupervisorRecoveryReady(false);
+        setError(
+          error instanceof Error
+            ? `Supervisor history restore failed: ${error.message}`
+            : 'Supervisor history restore failed.',
+        );
+        scheduleRefresh();
+      }
+    })();
     return () => {
       active = false;
       if (timer !== undefined) window.clearTimeout(timer);
