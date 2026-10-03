@@ -300,6 +300,103 @@ it('rejects malformed Supervisor thread status requests locally', async () => {
   }
 });
 
+it('stores and lists Supervisor messages only for the bound Dot thread', async () => {
+  const { workspace, config, dot } = setup();
+  try {
+    workspace.bindThread('thread-messages', dot.id, 'Messages');
+    const app = supervisorRoutes(config, workspace);
+
+    const saved = await app.request('/supervisor/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        threadId: 'thread-messages',
+        id: 'user-1',
+        role: 'user',
+        content: 'Persist this Supervisor turn.',
+      }),
+    });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({
+      ok: true,
+      message: {
+        id: 'user-1',
+        role: 'user',
+        content: 'Persist this Supervisor turn.',
+      },
+    });
+
+    const duplicate = await app.request('/supervisor/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        threadId: 'thread-messages',
+        id: 'user-1',
+        role: 'user',
+        content: 'Persist this Supervisor turn.',
+      }),
+    });
+    expect(duplicate.status).toBe(200);
+
+    const conflict = await app.request('/supervisor/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        threadId: 'thread-messages',
+        id: 'user-1',
+        role: 'user',
+        content: 'Different content.',
+      }),
+    });
+    expect(conflict.status).toBe(409);
+
+    const listed = await app.request('/supervisor/messages/list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ threadId: 'thread-messages' }),
+    });
+    expect(listed.status).toBe(200);
+    expect(await listed.json()).toMatchObject({
+      ok: true,
+      messages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: 'Persist this Supervisor turn.',
+        },
+      ],
+    });
+  } finally {
+    workspace.close();
+  }
+});
+
+it('rejects Supervisor message journal access from another Dot thread', async () => {
+  const { workspace, config, dot } = setup();
+  try {
+    const other = workspace.createDot(
+      dot.spaceId,
+      'Other',
+      'Not the Supervisor Dot.',
+      true,
+      true,
+    );
+    workspace.bindThread('thread-other-messages', other.id, 'Other messages');
+    const app = supervisorRoutes(config, workspace);
+    const response = await app.request('/supervisor/messages/list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ threadId: 'thread-other-messages' }),
+    });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({
+      error: 'Supervisor thread does not belong to this Dot.',
+    });
+  } finally {
+    workspace.close();
+  }
+});
+
 it('proxies cancel only after thread/run scope validation', async () => {
   const { workspace, config, dot } = setup();
   try {
