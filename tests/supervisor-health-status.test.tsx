@@ -37,6 +37,34 @@ it('normalizes Supervisor bridge readiness without secret values', () => {
         source: 'environment',
         error: '',
       },
+      threadBindingStore: {
+        healthy: true,
+        error: undefined,
+      },
+    },
+  });
+});
+
+it('normalizes unhealthy Supervisor thread binding storage', () => {
+  expect(
+    normalizeSupervisorHealth({
+      ok: true,
+      bridgeReady: true,
+      runReady: false,
+      execution: {
+        threadBindingStore: {
+          healthy: false,
+          error: 'OpenDots thread binding state is unreadable.',
+        },
+      },
+    }),
+  ).toMatchObject({
+    runReady: false,
+    execution: {
+      threadBindingStore: {
+        healthy: false,
+        error: 'OpenDots thread binding state is unreadable.',
+      },
     },
   });
 });
