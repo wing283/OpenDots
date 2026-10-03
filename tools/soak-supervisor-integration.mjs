@@ -129,11 +129,11 @@ function evaluateDagCache(first, second, keyComparison) {
   };
 }
 
-async function projectEvidence(base, supervisorRunId) {
-  if (!supervisorRunId) return null;
+async function projectEvidence(base, supervisorRunId, threadId) {
+  if (!supervisorRunId || !threadId) return null;
   return json(`${base}/api/supervisor/evidence`, {
     method: 'POST',
-    body: JSON.stringify({ supervisorRunId }),
+    body: JSON.stringify({ threadId, supervisorRunId }),
   });
 }
 
@@ -166,7 +166,7 @@ async function runOne({
       if (next.bridge !== 'supervisor-agui') return;
       snapshot = next;
       snapshots.push(snapshot);
-      if (onSnapshot) void onSnapshot(snapshot);
+      if (onSnapshot) void onSnapshot(snapshot, thread.id);
     },
     onCustomEvent: ({ event }) => {
       customEvents.push(event);
@@ -184,7 +184,11 @@ async function runOne({
     await agent.detachActiveRun();
   }
   const wallMs = performance.now() - started;
-  const evidence = await projectEvidence(base, snapshot.supervisorRunId);
+  const evidence = await projectEvidence(
+    base,
+    snapshot.supervisorRunId,
+    thread.id,
+  );
   const customSummary = summarizeCustomEvents(customEvents);
   return {
     threadId: thread.id,
@@ -364,7 +368,7 @@ if (mode === 'all' || mode === 'writer-approval') {
     title: 'Writer approval soak',
     prompt,
     state,
-    onSnapshot: async (snapshot) => {
+    onSnapshot: async (snapshot, threadId) => {
       if (
         approvalSent ||
         !snapshot.supervisorRunId ||
@@ -375,6 +379,7 @@ if (mode === 'all' || mode === 'writer-approval') {
       approvalResponse = await json(`${base}/api/supervisor/approval`, {
         method: 'POST',
         body: JSON.stringify({
+          threadId,
           supervisorRunId: snapshot.supervisorRunId,
           decision: 'approve',
         }),
@@ -451,7 +456,7 @@ if (mode === 'all' || mode === 'writer-decline') {
     title: 'Writer decline soak',
     prompt,
     state,
-    onSnapshot: async (snapshot) => {
+    onSnapshot: async (snapshot, threadId) => {
       if (
         declineSent ||
         !snapshot.supervisorRunId ||
@@ -462,6 +467,7 @@ if (mode === 'all' || mode === 'writer-decline') {
       declineResponse = await json(`${base}/api/supervisor/approval`, {
         method: 'POST',
         body: JSON.stringify({
+          threadId,
           supervisorRunId: snapshot.supervisorRunId,
           decision: 'decline',
         }),
@@ -525,7 +531,7 @@ if (mode === 'all' || mode === 'cancel') {
     title: 'Run cancel soak',
     prompt,
     state,
-    onSnapshot: async (snapshot) => {
+    onSnapshot: async (snapshot, threadId) => {
       if (
         cancelSent ||
         !snapshot.running ||
@@ -538,6 +544,7 @@ if (mode === 'all' || mode === 'cancel') {
       cancelResponse = await json(`${base}/api/supervisor/cancel`, {
         method: 'POST',
         body: JSON.stringify({
+          threadId,
           supervisorRunId: snapshot.supervisorRunId,
           supervisorPid: snapshot.supervisorPid,
         }),
