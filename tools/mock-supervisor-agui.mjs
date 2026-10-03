@@ -8,6 +8,7 @@ let planCacheSoakRuns = 0;
 let dagCacheSoakRuns = 0;
 const approvals = new Map();
 const cancellations = new Map();
+const threadSnapshots = new Map();
 
 async function readJson(req) {
   let raw = '';
@@ -103,6 +104,35 @@ const server = http.createServer(async (req, res) => {
       runReady: true,
       version: 'ci-mock',
       execution: { activeCount: 0, capacity: 3, missingRequiredEnv: [] },
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/thread-status') {
+    const body = await readJson(req);
+    const threadId = String(body.threadId || '');
+    const restored = threadSnapshots.get(threadId);
+    if (!restored) {
+      sendJson(res, 404, {
+        ok: false,
+        error: 'No Supervisor workflow is bound to this thread.',
+      });
+      return;
+    }
+    sendJson(res, 200, {
+      ok: true,
+      threadId,
+      bindingStatus: restored.cancelled
+        ? 'cancelled'
+        : restored.running
+          ? 'active'
+          : 'finished',
+      correlationState: restored.cancelled
+        ? 'cancelled'
+        : restored.running
+          ? 'matched'
+          : 'finished',
+      snapshot: restored,
     });
     return;
   }
@@ -261,16 +291,15 @@ const server = http.createServer(async (req, res) => {
       delta: 'ci-writer-approved',
     });
     writeSse(res, { type: 'TEXT_MESSAGE_END', messageId });
-    writeSse(
-      res,
-      snapshot({
-        bridgeRunId: runId,
-        supervisorRunId,
-        running: false,
-        approval: { status: 'approved' },
-        workers: [writer],
-      }),
-    );
+    const writerFinal = snapshot({
+      bridgeRunId: runId,
+      supervisorRunId,
+      running: false,
+      approval: { status: 'approved' },
+      workers: [writer],
+    });
+    threadSnapshots.set(threadId, writerFinal.snapshot);
+    writeSse(res, writerFinal);
     writeSse(res, { type: 'RUN_FINISHED', threadId, runId });
     approvals.delete(supervisorRunId);
     res.end();
@@ -316,16 +345,15 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    writeSse(
-      res,
-      snapshot({
-        bridgeRunId: runId,
-        supervisorRunId,
-        running: false,
-        cancelled: true,
-        workers: cancelWorkers,
-      }),
-    );
+    const cancelFinal = snapshot({
+      bridgeRunId: runId,
+      supervisorRunId,
+      running: false,
+      cancelled: true,
+      workers: cancelWorkers,
+    });
+    threadSnapshots.set(threadId, cancelFinal.snapshot);
+    writeSse(res, cancelFinal);
     writeSse(res, {
       type: 'RUN_ERROR',
       code: 'SUPERVISOR_CANCELLED',
@@ -445,32 +473,36 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  const runningSnapshot = snapshot({
+    bridgeRunId: runId,
+    supervisorRunId,
+    running: true,
+    eventCounts,
+    workers: workers.map((item) => ({
+      ...item,
+      status: item.id === 'planner' ? 'running' : 'waiting',
+      action: item.id === 'planner' ? 'PLAN' : 'WAIT',
+      phase: item.id === 'planner' ? 'planning' : 'dag',
+      waitingFor: item.dependsOn,
+    })),
+  });
+  const finalSnapshot = snapshot({
+    bridgeRunId: runId,
+    supervisorRunId,
+    running: false,
+    eventCounts,
+    workers,
+  });
+  threadSnapshots.set(threadId, finalSnapshot.snapshot);
+
   const events = [
     { type: 'RUN_STARTED', threadId, runId },
-    snapshot({
-      bridgeRunId: runId,
-      supervisorRunId,
-      running: true,
-      eventCounts,
-      workers: workers.map((item) => ({
-        ...item,
-        status: item.id === 'planner' ? 'running' : 'waiting',
-        action: item.id === 'planner' ? 'PLAN' : 'WAIT',
-        phase: item.id === 'planner' ? 'planning' : 'dag',
-        waitingFor: item.dependsOn,
-      })),
-    }),
+    runningSnapshot,
     ...customEvents,
     { type: 'TEXT_MESSAGE_START', messageId, role: 'assistant' },
     { type: 'TEXT_MESSAGE_CONTENT', messageId, delta: 'ci-mock-ok' },
     { type: 'TEXT_MESSAGE_END', messageId },
-    snapshot({
-      bridgeRunId: runId,
-      supervisorRunId,
-      running: false,
-      eventCounts,
-      workers,
-    }),
+    finalSnapshot,
     { type: 'RUN_FINISHED', threadId, runId },
   ];
 
