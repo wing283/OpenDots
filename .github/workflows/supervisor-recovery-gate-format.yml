@@ -1,0 +1,27 @@
+name: Supervisor Recovery Gate Format Diagnostic
+
+on:
+  push:
+    branches:
+      - feature/supervisor-integration
+    paths:
+      - ".github/workflows/supervisor-recovery-gate-format.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Print recovery gate Prettier diff
+        run: |
+          npx prettier --write src/client/Chat.tsx
+          git diff --no-color -- src/client/Chat.tsx
