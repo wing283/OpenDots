@@ -253,6 +253,17 @@ try {
       `Writer approval soak verdict failed: ${JSON.stringify(writerSoak.writerApprovalVerdict)}`,
     );
 
+  const writerDeclineSoak = await runSoakMode(
+    'writer-decline',
+    dotId,
+    appPort,
+    root,
+  );
+  if (writerDeclineSoak.writerDeclineVerdict?.pass !== true)
+    throw new Error(
+      `Writer decline soak verdict failed: ${JSON.stringify(writerDeclineSoak.writerDeclineVerdict)}`,
+    );
+
   const cancelSoak = await runSoakMode('cancel', dotId, appPort);
   if (cancelSoak.cancelVerdict?.pass !== true)
     throw new Error(
@@ -282,6 +293,7 @@ try {
         planCacheSmallVerdict: planCacheSoak.planCacheSmallVerdict,
         dagCacheVerdict: dagCacheSoak.dagCacheVerdict,
         writerApprovalVerdict: writerSoak.writerApprovalVerdict,
+        writerDeclineVerdict: writerDeclineSoak.writerDeclineVerdict,
         cancelVerdict: cancelSoak.cancelVerdict,
       },
       null,
