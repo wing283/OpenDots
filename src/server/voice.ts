@@ -30,9 +30,9 @@ export class VoiceService {
     return call;
   }
   async begin(threadId: string, sdp: string, signal: AbortSignal) {
-    this.platform.requireReady();
-    this.platform.workspace.requireThread(threadId);
-    if (!this.platform.setup().voice)
+    const thread = this.platform.workspace.requireThread(threadId);
+    this.platform.requireReady(thread.dotId);
+    if (!this.platform.config.voiceKey || !this.platform.config.voiceModel)
       throw new Error('Voice setup required: VOICE_API_KEY and VOICE_MODEL.');
     if (this.platform.store.settings().paused)
       throw new Error('Dot is paused.');
@@ -48,9 +48,7 @@ export class VoiceService {
     deadline.unref();
     this.jobs.set(call.id, { controller, calls: new Map(), deadline });
     const timeout = AbortSignal.timeout(20_000);
-    const dot = this.platform.workspace.dot(
-      this.platform.workspace.requireThread(threadId).dotId,
-    )!;
+    const dot = this.platform.workspace.dot(thread.dotId)!;
     try {
       const combined = AbortSignal.any([signal, timeout, controller.signal]);
       const history = await new Promise<string>((resolve, reject) => {
@@ -214,7 +212,7 @@ export class VoiceService {
     if (this.platform.store.settings().paused) {
       this.platform.workspace.setCallError(
         id,
-        'Transcript saved locally; pending Intelligence sync until workspace resumes.',
+        'Transcript saved locally; pending conversation sync until workspace resumes.',
       );
       return;
     }
@@ -228,13 +226,16 @@ export class VoiceService {
     } catch {
       this.platform.workspace.setCallError(
         id,
-        'Call ended; its local receipt is saved, but Intelligence transcript sync failed.',
+        'Call ended; its local receipt is saved, but conversation transcript sync failed.',
       );
     }
   }
   async resumePending() {
     for (const call of this.platform.workspace.calls())
-      if (call.error?.includes('pending Intelligence sync')) {
+      if (
+        call.error?.includes('pending conversation sync') ||
+        call.error?.includes('pending Intelligence sync')
+      ) {
         this.platform.workspace.setCallError(call.id, null);
         await this.syncReceipt(call.id, call.transcript);
       }
