@@ -1,0 +1,38 @@
+name: TraceMaker binary build
+on:
+  push:
+    branches:
+      - ci/tracemaker-binary
+    paths:
+      - .github/workflows/tracemaker-binary.yml
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build git libboost-dev libeigen3-dev libsqlite3-dev libzstd-dev nlohmann-json3-dev libcli11-dev
+      - name: Fetch exact TraceMaker
+        run: |
+          git clone https://github.com/DingoOz/TraceMaker.git /tmp/TraceMaker
+          cd /tmp/TraceMaker
+          git checkout 89ff58ca86b2104ac6c55ae8a5dc77e4ab3e8d00
+      - name: Build CPU binary
+        run: |
+          cmake -S /tmp/TraceMaker -B /tmp/TraceMaker/build/smoke -G Ninja -DCMAKE_BUILD_TYPE=Release -DTM_ENABLE_CUDA=OFF -DTM_BUILD_TESTS=OFF -DTM_BUILD_PYTHON=OFF -DTM_WERROR=OFF
+          cmake --build /tmp/TraceMaker/build/smoke --target tracemaker --parallel 2
+          mkdir -p out
+          cp /tmp/TraceMaker/build/smoke/src/app/tracemaker out/
+          ldd out/tracemaker > out/ldd.txt
+          /tmp/TraceMaker/build/smoke/src/app/tracemaker --version > out/version.txt 2>&1 || true
+          sha256sum out/tracemaker > out/sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tracemaker-cpu-exact
+          path: out/
+          if-no-files-found: error
