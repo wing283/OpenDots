@@ -113,6 +113,19 @@ bool better(const Candidate& a, const Candidate& b) {
 """,
     )
 
+    replace_once(
+        cpp,
+        """      // Swap with an interchangeable part (same footprint, side and orientation class).
+      for (std::size_t bi = 0; bi < p.parts.size(); ++bi) {
+""",
+        """      // Same-footprint is not enough to prove electrical interchangeability. ASTRA precision mode
+      // keeps local shift/rotate moves but forbids cross-functional swaps (e.g. Hall vs current-sense 0402).
+      if (res.eval.precision) continue;
+      // Swap with an interchangeable part (same footprint, side and orientation class).
+      for (std::size_t bi = 0; bi < p.parts.size(); ++bi) {
+""",
+    )
+
     replace_once(main_cpp, "#include <map>\n", "#include <map>\n#include <set>\n")
     replace_once(
         main_cpp,
@@ -168,6 +181,17 @@ RoutePriority load_route_priority(const std::string& path) {
 """,
         """place::RouteFn make_route_fn(const std::string& in, const model::DesignRules& rules, const place::Problem& p, long work, int threads,
                              std::uint64_t seed, const RoutePriority& priority) {
+""",
+    )
+
+    replace_once(
+        main_cpp,
+        """    place::RouteEval e;
+    io::LoadedBoard lb = io::read_board_file(in);
+""",
+        """    place::RouteEval e;
+    e.precision = priority.enabled;
+    io::LoadedBoard lb = io::read_board_file(in);
 """,
     )
 
