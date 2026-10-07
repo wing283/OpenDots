@@ -125,10 +125,7 @@ export function createApp({
       }
       const missing = platform.missingForDot(thread.dotId);
       if (missing.length)
-        return c.json(
-          { error: `Setup required: ${missing.join(', ')}.` },
-          503,
-        );
+        return c.json({ error: `Setup required: ${missing.join(', ')}.` }, 503);
     }
     const task = store.createTask(
       parsed.data.prompt,
