@@ -171,7 +171,7 @@ RoutePriority load_route_priority(const std::string& path) {
         """    const model::Board b = io::read_board(lb.doc);  // applies the pending edits (same board as the saved file)
     route::RouterOptions ro;
 """,
-        """    const model::Board b = io::read_board(lb.doc);  // applies the pending edits (same board as the saved file)
+        """    model::Board b = io::read_board(lb.doc);  // mutable: Obstacles builds spatial state against the board
 
     // Static pin-escape feasibility is cheap compared with a route and catches the failure mode that
     // dominates dense ASTRA placements. Plane/zone nets are explicitly exempted by the profile.
