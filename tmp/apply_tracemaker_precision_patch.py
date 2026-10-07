@@ -44,8 +44,11 @@ def main() -> int:
   int connections = 0, routed = 0;
   // Optional placement-quality fields. They stay zero when the caller does not
   // provide a priority profile, preserving upstream behaviour exactly.
+  bool precision = false;         // caller supplied a placement priority profile
   int critical_dead = 0;          // signal pins that cannot escape on critical nets
+  int critical_boxed = 0;         // critical unresolved connections reported boxed-in by the router
   int dead_signal = 0;            // signal pins that cannot escape (plane/zone nets excluded by caller)
+  int boxed_signal = 0;           // non-plane unresolved connections reported boxed-in
   std::int64_t critical_penalty = 0;  // weighted unresolved critical connections
   std::int64_t weighted_penalty = 0;  // weighted unresolved connections
   int unrouted() const { return connections - routed; }
@@ -79,8 +82,10 @@ struct Candidate {
   if (a.ok != b.ok) return a.ok;
   if (!a.ok) return false;
   if (a.critical_dead != b.critical_dead) return a.critical_dead < b.critical_dead;
+  if (a.critical_boxed != b.critical_boxed) return a.critical_boxed < b.critical_boxed;
   if (a.critical_penalty != b.critical_penalty) return a.critical_penalty < b.critical_penalty;
   if (a.unrouted() != b.unrouted()) return a.unrouted() < b.unrouted();
+  if (a.boxed_signal != b.boxed_signal) return a.boxed_signal < b.boxed_signal;
   if (a.dead_signal != b.dead_signal) return a.dead_signal < b.dead_signal;
   if (a.weighted_penalty != b.weighted_penalty) return a.weighted_penalty < b.weighted_penalty;
   return false;
@@ -203,10 +208,17 @@ RoutePriority load_route_priority(const std::string& path) {
 """,
         """    e.seconds = res.seconds;
     if (priority.enabled)
-      for (const auto& u : res.unrouted) {
+      for (std::size_t ui = 0; ui < res.unrouted.size(); ++ui) {
+        const auto& u = res.unrouted[ui];
         const auto [prio, weight] = priority.get(u.net);
         e.weighted_penalty += weight;
         if (prio >= priority.critical_priority) e.critical_penalty += weight;
+        const bool plane = priority.escape_plane_nets.contains(u.net);
+        const bool boxed = ui < res.failures.size() && res.failures[ui].find("boxed in") != std::string::npos;
+        if (boxed && !plane) {
+          ++e.boxed_signal;
+          if (prio >= priority.critical_priority) ++e.critical_boxed;
+        }
       }
     std::map<std::string, int> part_of;
 """,
@@ -231,7 +243,8 @@ RoutePriority load_route_priority(const std::string& path) {
 """,
         """nlohmann::json eval_json(const place::RouteEval& e) {
   return {{"connections", e.connections}, {"routed", e.routed}, {"unrouted", e.unrouted()}, {"seconds", e.seconds},
-          {"critical_dead", e.critical_dead}, {"dead_signal", e.dead_signal},
+          {"precision", e.precision}, {"critical_dead", e.critical_dead}, {"critical_boxed", e.critical_boxed},
+          {"dead_signal", e.dead_signal}, {"boxed_signal", e.boxed_signal},
           {"critical_penalty", e.critical_penalty}, {"weighted_penalty", e.weighted_penalty}};
 }
 """,
@@ -310,8 +323,9 @@ RoutePriority load_route_priority(const std::string& path) {
 """,
         """std::string describe(const RouteEval& e) {
   std::string s = std::to_string(e.unrouted()) + " unrouted (" + std::to_string(e.routed) + "/" + std::to_string(e.connections) + ")";
-  if (e.critical_dead || e.dead_signal || e.critical_penalty || e.weighted_penalty)
-    s += ", crit-dead " + std::to_string(e.critical_dead) + ", crit-pen " + std::to_string(e.critical_penalty) +
+  if (e.precision)
+    s += ", crit-dead " + std::to_string(e.critical_dead) + ", crit-box " + std::to_string(e.critical_boxed) +
+         ", crit-pen " + std::to_string(e.critical_penalty) + ", boxed " + std::to_string(e.boxed_signal) +
          ", dead " + std::to_string(e.dead_signal) + ", wpen " + std::to_string(e.weighted_penalty);
   return s;
 }
