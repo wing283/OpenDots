@@ -6,6 +6,12 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { validateLearningSettings } from '../shared/learning.js';
 import type { CallReceipt, Conversation, Dot, Space } from '../shared/types.js';
+export interface StoredSupervisorConnection {
+  enabled: boolean;
+  url?: string;
+  dotId?: string;
+  token?: string;
+}
 export class WorkspaceStore {
   private db: DatabaseSync;
   readonly pages: Pages;
@@ -24,6 +30,7 @@ export class WorkspaceStore {
       CREATE TABLE IF NOT EXISTS calls(id TEXT PRIMARY KEY, threadId TEXT NOT NULL, startedAt INTEGER NOT NULL, endedAt INTEGER, status TEXT NOT NULL, transcript TEXT NOT NULL, error TEXT);
       CREATE TABLE IF NOT EXISTS captures(threadId TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS supervisor_messages(threadId TEXT NOT NULL, id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, createdAt INTEGER NOT NULL, PRIMARY KEY(threadId, id));
+      CREATE TABLE IF NOT EXISTS integration_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS supervisor_messages_thread_created ON supervisor_messages(threadId, createdAt);`);
     for (const [table, column, definition] of [
       ['dots', 'learningContainerId', 'TEXT'],
@@ -78,6 +85,20 @@ export class WorkspaceStore {
   }
   close() {
     this.db.close();
+  }
+  supervisorConnection(): StoredSupervisorConnection | undefined {
+    const row = this.db
+      .prepare("SELECT value FROM integration_settings WHERE key='supervisor'")
+      .get() as { value: string } | undefined;
+    if (!row) return undefined;
+    return JSON.parse(row.value) as StoredSupervisorConnection;
+  }
+  saveSupervisorConnection(value: StoredSupervisorConnection) {
+    this.db
+      .prepare(
+        'INSERT INTO integration_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+      )
+      .run('supervisor', JSON.stringify(value));
   }
   spaces(): Space[] {
     return this.db

@@ -40,6 +40,10 @@ Edit `.env` on the server and restart after changes:
 
 The model environment variable names follow the configured provider adapter. Provider credentials belong in `.env`, not client-side variables or source code. Conversation history lives in the configured Intelligence project; copying the SQLite file alone does not back up that history.
 
+## Supervisor connection
+
+Start the Supervisor bridge separately, then open **Settings → Supervisor connection** in OpenDots. Enter the bridge URL (for a local bridge, usually `http://127.0.0.1:8791/`) and choose the existing Dot dedicated to Supervisor runs. For a bridge on another host, enter the same bearer token configured on that bridge as `SUPERVISOR_OPENDOTS_TOKEN`. Save, then use **Test connection**. The connection and token are stored server-side in the workspace database; the token is never sent back to the browser. Leave both URL and Dot blank to disable the integration. The equivalent environment settings are `SUPERVISOR_AGUI_URL`, `SUPERVISOR_DOT_ID`, and `SUPERVISOR_AGUI_TOKEN`.
+
 ## Pages and page conversations
 
 Select a Space to open its page library. Search for a document, switch between grid and list views, or create a new page. The visual editor supports formatting, headings, lists, checklists, tables, and slash commands. Use `/` to insert a block and Cmd/Ctrl+S to save immediately. Pages autosave after editing pauses; the save status tells you whether changes reached the server.

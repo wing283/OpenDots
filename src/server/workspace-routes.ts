@@ -29,9 +29,36 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
       conversations: platform.workspace.conversations(),
       setup: platform.setup(),
       supervisorDotId: platform.config.supervisorDotId,
+      supervisor: platform.supervisorConnection(),
       calls: platform.workspace.calls(),
     }),
   );
+  app.patch('/supervisor/config', async (c) => {
+    const parsed = z
+      .object({
+        url: z.string().max(2048),
+        dotId: z.string().max(128),
+        token: z.string().max(4096).optional(),
+        clearToken: z.boolean().optional(),
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ error: 'Invalid Supervisor connection settings.' }, 400);
+    try {
+      return c.json(platform.updateSupervisorConnection(parsed.data));
+    } catch (error) {
+      return c.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Could not configure the Supervisor connection.',
+        },
+        400,
+      );
+    }
+  });
   app.post('/spaces', async (c) => {
     const data = z
       .object({

@@ -109,11 +109,18 @@ export interface SetupStatus {
   slack: string;
   missing: string[];
 }
+export interface SupervisorConnectionSettings {
+  enabled: boolean;
+  url: string;
+  dotId: string;
+  tokenConfigured: boolean;
+}
 export interface WorkspaceState {
   spaces: Space[];
   dots: Dot[];
   conversations: Conversation[];
   setup: SetupStatus;
   supervisorDotId?: string;
+  supervisor: SupervisorConnectionSettings;
   calls: CallReceipt[];
 }

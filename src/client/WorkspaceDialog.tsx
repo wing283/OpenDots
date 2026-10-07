@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import type { Dot, Memory, State, WorkspaceState } from '../shared/types';
+import { api } from './api';
 export type Dialog =
   | { type: 'space' }
   | { type: 'dot'; dot?: Dot; spaceId: string }
@@ -53,6 +54,16 @@ export function WorkspaceDialog({
   const [skillDelivery, setSkillDelivery] = useState(
     dialog.type === 'dot' ? (dialog.dot?.skillDeliveryEnabled ?? false) : false,
   );
+  const [supervisorUrl, setSupervisorUrl] = useState(
+    dialog.type === 'settings' ? workspace.supervisor.url : '',
+  );
+  const [supervisorDotId, setSupervisorDotId] = useState(
+    dialog.type === 'settings' ? workspace.supervisor.dotId : '',
+  );
+  const [supervisorToken, setSupervisorToken] = useState('');
+  const [clearSupervisorToken, setClearSupervisorToken] = useState(false);
+  const [supervisorCheck, setSupervisorCheck] = useState('');
+  const [checkingSupervisor, setCheckingSupervisor] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const container = useRef<HTMLElement>(null);
@@ -164,7 +175,16 @@ export function WorkspaceDialog({
                 intervalSeconds: Number(interval),
               };
             }
-            if (await mutate(path, method, body)) onClose();
+            let saved = await mutate(path, method, body);
+            if (saved && dialog.type === 'settings') {
+              saved = await mutate('/supervisor/config', 'PATCH', {
+                url: supervisorUrl,
+                dotId: supervisorDotId,
+                ...(supervisorToken ? { token: supervisorToken } : {}),
+                ...(clearSupervisorToken ? { clearToken: true } : {}),
+              });
+            }
+            if (saved) onClose();
             else
               setError('Could not save. Review the workspace error and retry.');
             setBusy(false);
@@ -359,28 +379,140 @@ export function WorkspaceDialog({
             </>
           )}
           {dialog.type === 'settings' && (
-            <div className="config-note">
-              <strong>Service setup</strong>
-              <p>
-                {workspace.setup.missing.length
-                  ? `Add ${workspace.setup.missing.join(', ')} to the server environment, then restart.`
-                  : 'Text configuration is present. A successful conversation confirms connectivity.'}
-              </p>
-              <p>
-                Slack: {workspace.setup.slack.replaceAll('_', ' ')}. Voice:{' '}
-                {workspace.setup.voice
-                  ? 'configuration present'
-                  : 'needs VOICE_API_KEY and VOICE_MODEL'}
-                .
-              </p>
-              <a
-                href="https://github.com/CopilotKit/OpenDots/blob/main/docs/SETUP.md"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Template setup guide ↗
-              </a>
-            </div>
+            <>
+              <fieldset className="space-access-fields">
+                <legend>Supervisor connection</legend>
+                <p className="muted">
+                  Connect one existing Dot to your Supervisor bridge. The
+                  bridge runs separately; the URL is usually
+                  http://127.0.0.1:8791/.
+                </p>
+                <label className="field-label" htmlFor="supervisor-url">
+                  Bridge URL
+                </label>
+                <input
+                  id="supervisor-url"
+                  type="url"
+                  value={supervisorUrl}
+                  placeholder="http://127.0.0.1:8791/"
+                  maxLength={2048}
+                  onChange={(event) => setSupervisorUrl(event.target.value)}
+                />
+                <label className="field-label" htmlFor="supervisor-dot">
+                  Dedicated Supervisor Dot
+                </label>
+                <select
+                  id="supervisor-dot"
+                  value={supervisorDotId}
+                  onChange={(event) => setSupervisorDotId(event.target.value)}
+                >
+                  <option value="">Choose a Dot</option>
+                  {workspace.dots.map((dot) => (
+                    <option key={dot.id} value={dot.id}>
+                      {dot.name}
+                    </option>
+                  ))}
+                </select>
+                <label className="field-label" htmlFor="supervisor-token">
+                  Bridge bearer token
+                </label>
+                <input
+                  id="supervisor-token"
+                  type="password"
+                  autoComplete="new-password"
+                  value={supervisorToken}
+                  placeholder={
+                    workspace.supervisor.tokenConfigured
+                      ? 'Saved; leave blank to keep it'
+                      : 'Only needed for a remote bridge'
+                  }
+                  maxLength={4096}
+                  onChange={(event) => {
+                    setSupervisorToken(event.target.value);
+                    if (event.target.value) setClearSupervisorToken(false);
+                  }}
+                />
+                <p className="muted">
+                  {workspace.supervisor.enabled
+                    ? 'Connection settings are saved on this server. The token is never returned to the browser.'
+                    : 'For a non-local bridge, use the same token configured as SUPERVISOR_OPENDOTS_TOKEN.'}
+                </p>
+                {workspace.supervisor.tokenConfigured && (
+                  <label className="permission-row">
+                    <input
+                      type="checkbox"
+                      checked={clearSupervisorToken}
+                      onChange={(event) =>
+                        setClearSupervisorToken(event.target.checked)
+                      }
+                    />
+                    <span>Remove the saved bridge token</span>
+                  </label>
+                )}
+                <div className="supervisor-connection-actions">
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={!workspace.supervisor.enabled || checkingSupervisor}
+                    onClick={async () => {
+                      setCheckingSupervisor(true);
+                      setSupervisorCheck('');
+                      try {
+                        const health = await api<{
+                          ok?: boolean;
+                          runReady?: boolean;
+                        }>('/supervisor/health');
+                        setSupervisorCheck(
+                          health.runReady
+                            ? 'Bridge reachable and ready to run.'
+                            : health.ok
+                              ? 'Bridge reachable, but not ready to run.'
+                              : 'Bridge responded without a ready status.',
+                        );
+                      } catch (checkError) {
+                        setSupervisorCheck(
+                          checkError instanceof Error
+                            ? checkError.message
+                            : 'Could not reach the Supervisor bridge.',
+                        );
+                      } finally {
+                        setCheckingSupervisor(false);
+                      }
+                    }}
+                  >
+                    {checkingSupervisor ? 'Checking…' : 'Test connection'}
+                  </button>
+                  {supervisorCheck && (
+                    <span role="status">{supervisorCheck}</span>
+                  )}
+                </div>
+                <p className="muted">
+                  Leave both URL and Dot blank to disable this connection.
+                </p>
+              </fieldset>
+              <div className="config-note">
+                <strong>Service setup</strong>
+                <p>
+                  {workspace.setup.missing.length
+                    ? `Add ${workspace.setup.missing.join(', ')} to the server environment, then restart.`
+                    : 'Text configuration is present. A successful conversation confirms connectivity.'}
+                </p>
+                <p>
+                  Slack: {workspace.setup.slack.replaceAll('_', ' ')}. Voice:{' '}
+                  {workspace.setup.voice
+                    ? 'configuration present'
+                    : 'needs VOICE_API_KEY and VOICE_MODEL'}
+                  .
+                </p>
+                <a
+                  href="https://github.com/CopilotKit/OpenDots/blob/main/docs/SETUP.md"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Template setup guide ↗
+                </a>
+              </div>
+            </>
           )}
           {dialog.type === 'memory' && (
             <p className="muted">

@@ -31,6 +31,18 @@ export class Platform {
     readonly workspace: WorkspaceStore,
     readonly config: PlatformConfig,
   ) {
+    const savedSupervisor = workspace.supervisorConnection();
+    if (savedSupervisor) {
+      config.supervisorAguiUrl = savedSupervisor.enabled
+        ? savedSupervisor.url
+        : undefined;
+      config.supervisorDotId = savedSupervisor.enabled
+        ? savedSupervisor.dotId
+        : undefined;
+      config.supervisorAguiToken = savedSupervisor.enabled
+        ? savedSupervisor.token
+        : undefined;
+    }
     validateSupervisorAgentConfig(
       config,
       workspace.dots().map((dot) => dot.id),
@@ -115,6 +127,48 @@ export class Platform {
         (this.config.slackChannel ? 'setup_required' : 'not_configured'),
       this.channelStartupFailed,
     );
+  }
+  supervisorConnection() {
+    return {
+      enabled: !!(this.config.supervisorAguiUrl && this.config.supervisorDotId),
+      url: this.config.supervisorAguiUrl ?? '',
+      dotId: this.config.supervisorDotId ?? '',
+      tokenConfigured: !!this.config.supervisorAguiToken,
+    };
+  }
+  updateSupervisorConnection(input: {
+    url: string;
+    dotId: string;
+    token?: string;
+    clearToken?: boolean;
+  }) {
+    const url = input.url.trim();
+    const dotId = input.dotId.trim();
+    const disabling = !url && !dotId;
+    const token = disabling
+      ? undefined
+      : input.token?.trim() ||
+        (input.clearToken ? undefined : this.config.supervisorAguiToken);
+    const candidate: PlatformConfig = {
+      ...this.config,
+      supervisorAguiUrl: url || undefined,
+      supervisorDotId: dotId || undefined,
+      supervisorAguiToken: token,
+    };
+    validateSupervisorAgentConfig(
+      candidate,
+      this.workspace.dots().map((dot) => dot.id),
+    );
+    this.config.supervisorAguiUrl = candidate.supervisorAguiUrl;
+    this.config.supervisorDotId = candidate.supervisorDotId;
+    this.config.supervisorAguiToken = candidate.supervisorAguiToken;
+    this.workspace.saveSupervisorConnection({
+      enabled: !disabling,
+      ...(url ? { url } : {}),
+      ...(dotId ? { dotId } : {}),
+      ...(token ? { token } : {}),
+    });
+    return this.supervisorConnection();
   }
   missingForDot(dotId?: string) {
     const missing = this.setup().missing;

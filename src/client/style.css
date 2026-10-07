@@ -3553,6 +3553,23 @@ h3 {
   font-weight: 600;
   padding: 0 4px;
 }
+.supervisor-connection-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.supervisor-connection-actions button {
+  border: 1px solid #d9dbe3;
+  background: #fff;
+  color: #4e5362;
+  font-size: 11px;
+}
+.supervisor-connection-actions [role='status'] {
+  color: var(--muted);
+  font-size: 11px;
+}
 
 .space-nav-row {
   display: flex;
