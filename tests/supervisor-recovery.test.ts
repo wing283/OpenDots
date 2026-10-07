@@ -52,9 +52,7 @@ it('rejects unsafe or incomplete recovered messages', () => {
   ).toBeNull();
 });
 
-it(
-  'rejects recovered final content already present as the latest assistant message',
-  () => {
+it('rejects recovered final content already present as the latest assistant message', () => {
   expect(
     recoveredSupervisorMessage(
       {
@@ -71,13 +69,10 @@ it(
         },
       ],
     ),
-    ).toBeNull();
-  },
-);
+  ).toBeNull();
+});
 
-it(
-  'does not suppress a repeated answer when the latest visible message is a user turn',
-  () => {
+it('does not suppress a repeated answer when the latest visible message is a user turn', () => {
   expect(
     recoveredSupervisorMessage(
       {
@@ -94,10 +89,9 @@ it(
         { id: 'user-new', role: 'user', content: 'Ask again.' },
       ],
     ),
-    ).toEqual({
-      id: 'supervisor-recovery:sv-3:final',
-      role: 'assistant',
-      content: 'Repeated answer.',
-    });
-  },
-);
+  ).toEqual({
+    id: 'supervisor-recovery:sv-3:final',
+    role: 'assistant',
+    content: 'Repeated answer.',
+  });
+});
