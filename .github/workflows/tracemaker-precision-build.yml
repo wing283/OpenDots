@@ -1,0 +1,49 @@
+name: TraceMaker precision build
+on:
+  push:
+    branches:
+      - ci/tracemaker-precision-build
+    paths:
+      - .github/workflows/tracemaker-precision-build.yml
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build git python3 libboost-dev libeigen3-dev libsqlite3-dev libzstd-dev nlohmann-json3-dev libcli11-dev
+      - name: Fetch pinned TraceMaker
+        run: |
+          git clone https://github.com/DingoOz/TraceMaker.git /tmp/TraceMaker
+          git -C /tmp/TraceMaker checkout 89ff58ca86b2104ac6c55ae8a5dc77e4ab3e8d00
+      - name: Apply precision patch
+        run: |
+          python3 tmp/apply_tracemaker_precision_patch.py /tmp/TraceMaker
+          git -C /tmp/TraceMaker diff --check
+          git -C /tmp/TraceMaker diff > /tmp/precision.patch
+          grep -n "route-priority\|better_eval\|critical_dead" /tmp/TraceMaker/src/place/place_main.cpp /tmp/TraceMaker/src/place/routable.cpp /tmp/TraceMaker/src/place/routable.hpp
+      - name: Build patched binaries
+        run: |
+          cmake -S /tmp/TraceMaker -B /tmp/TraceMaker/build/precision -G Ninja -DCMAKE_BUILD_TYPE=Release -DTM_ENABLE_CUDA=OFF -DTM_BUILD_TESTS=ON -DTM_BUILD_PYTHON=OFF -DTM_WERROR=OFF
+          cmake --build /tmp/TraceMaker/build/precision --target tracemaker tracemaker-place --parallel 2
+          /tmp/TraceMaker/build/precision/src/place/tracemaker-place --help | grep -A2 route-priority
+      - name: Run tests
+        run: |
+          ctest --test-dir /tmp/TraceMaker/build/precision --output-on-failure -j2
+      - name: Package
+        run: |
+          mkdir -p out
+          cp /tmp/TraceMaker/build/precision/src/app/tracemaker out/
+          cp /tmp/TraceMaker/build/precision/src/place/tracemaker-place out/
+          cp /tmp/precision.patch out/
+          sha256sum out/tracemaker out/tracemaker-place > out/sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tracemaker-astra-precision-cpu
+          path: out/
+          if-no-files-found: error
