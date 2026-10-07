@@ -203,6 +203,17 @@ RoutePriority load_route_priority(const std::string& path) {
 
     replace_once(
         main_cpp,
+        """    ro.optimize = false;    // clean-up never changes the routed count, which is all the check reads
+    const auto res = route::route_portfolio(b, rules, ro, threads).best;
+""",
+        """    ro.optimize = false;    // clean-up never changes the routed count, which is all the check reads
+    if (priority.enabled) ro.escape_plan = true;  // same oracle as the final ASTRA --escape-plan route
+    const auto res = route::route_portfolio(b, rules, ro, threads).best;
+""",
+    )
+
+    replace_once(
+        main_cpp,
         """    e.seconds = res.seconds;
     std::map<std::string, int> part_of;
 """,
