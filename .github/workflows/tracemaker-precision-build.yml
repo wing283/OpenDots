@@ -5,6 +5,7 @@ on:
       - ci/tracemaker-precision-build
     paths:
       - .github/workflows/tracemaker-precision-build.yml
+      - tmp/apply_tracemaker_precision_patch.py
 permissions:
   contents: read
 jobs:
