@@ -15,7 +15,6 @@ it('rejects a swallowed SDK failure rather than reusing a previous answer', () =
   ).toBe('Current answer');
 });
 
-
 it('runs a headless Supervisor AG-UI turn and returns its durable run id', async () => {
   const fetchMock = async (_url: RequestInfo | URL, init?: RequestInit) => {
     const request = JSON.parse(String(init?.body || '{}'));
