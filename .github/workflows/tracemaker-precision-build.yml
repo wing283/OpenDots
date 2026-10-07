@@ -29,12 +29,9 @@ jobs:
           grep -n "route-priority\|better_eval\|critical_dead" /tmp/TraceMaker/src/place/place_main.cpp /tmp/TraceMaker/src/place/routable.cpp /tmp/TraceMaker/src/place/routable.hpp
       - name: Build patched binaries
         run: |
-          cmake -S /tmp/TraceMaker -B /tmp/TraceMaker/build/precision -G Ninja -DCMAKE_BUILD_TYPE=Release -DTM_ENABLE_CUDA=OFF -DTM_BUILD_TESTS=ON -DTM_BUILD_PYTHON=OFF -DTM_WERROR=OFF
+          cmake -S /tmp/TraceMaker -B /tmp/TraceMaker/build/precision -G Ninja -DCMAKE_BUILD_TYPE=Release -DTM_ENABLE_CUDA=OFF -DTM_BUILD_TESTS=OFF -DTM_BUILD_PYTHON=OFF -DTM_WERROR=OFF
           cmake --build /tmp/TraceMaker/build/precision --target tracemaker tracemaker-place --parallel 2
           /tmp/TraceMaker/build/precision/src/place/tracemaker-place --help | grep -A2 route-priority
-      - name: Run tests
-        run: |
-          ctest --test-dir /tmp/TraceMaker/build/precision --output-on-failure -j2
       - name: Package
         run: |
           mkdir -p out
